@@ -1,0 +1,290 @@
+---
+title: "SDK Architecture"
+description: "Understanding the structure and components of the HotWheels SDK"
+---
+
+## Overview
+
+The HotWheels SDK is a comprehensive C++ framework for creating game modifications for Counter-Strike: Global Offensive. It follows a modular architecture that separates concerns into distinct layers, making it easy to extend and maintain.
+
+## Core Components
+
+The SDK is organized into four primary modules:
+
+<CardGroup cols={2}>
+  <Card title="Globals" icon="globe">
+    Core initialization, interfaces, and global state management
+  </Card>
+  <Card title="Utils" icon="wrench">
+    Utility systems for memory operations, rendering, and helpers
+  </Card>
+  <Card title="Hacks" icon="code">
+    Feature implementations and game logic modifications
+  </Card>
+  <Card title="Game SDK" icon="gamepad">
+    CS:GO game structures, classes, and interfaces
+  </Card>
+</CardGroup>
+
+## Directory Structure
+
+```
+hw-sdk/
+├── globals/          # Core systems
+│   ├── ctx/         # Global context and state
+│   ├── hooks/       # Hook implementations
+│   ├── interfaces/  # Game interface management
+│   └── hotwheels/   # Main initialization
+├── utils/           # Utility systems
+│   ├── modules/     # Module and pattern scanning
+│   ├── netvar/      # Network variable management
+│   ├── detour/      # MinHook wrapper
+│   ├── vfunc/       # Virtual function helpers
+│   ├── renderer/    # Drawing utilities
+│   └── math/        # Math operations
+├── hacks/           # Feature implementations
+│   ├── features/    # Aimbot, visuals, movement
+│   ├── prediction/  # Game prediction
+│   └── menu/        # ImGui interface
+├── game/sdk/        # Game structures
+│   ├── classes/     # Game classes
+│   ├── structs/     # Data structures
+│   └── enums/       # Enumerations
+└── dependencies/    # Third-party libraries
+```
+
+## Initialization Flow
+
+The SDK follows a specific initialization sequence when injected into the game process:
+
+<Steps>
+  <Step title="DLL Entry">
+    The `DllMain` function is called when the DLL is injected:
+    
+    ```cpp
+    BOOL APIENTRY DllMain(HMODULE hmodule, DWORD ul_reason_for_call, LPVOID lpReserved)
+    {
+        switch (ul_reason_for_call) {
+        case DLL_PROCESS_ATTACH:
+            LI_FN(DisableThreadLibraryCalls)(hmodule);
+            return utils::cheat_create_thread(hotwheels::init, hmodule);
+        case DLL_PROCESS_DETACH:
+            break;
+        }
+        return TRUE;
+    }
+    ```
+    
+    Source: `dllmain.cpp:3-14`
+  </Step>
+  
+  <Step title="Thread Creation">
+    A separate thread is created to avoid blocking the main game thread during initialization.
+  </Step>
+  
+  <Step title="Interface Initialization">
+    Game interfaces are captured using the `g_interfaces` global:
+    
+    ```cpp
+    struct interfaces {
+        IDirect3DDevice9* device;
+        sdk::iv_engine_client* engine;
+        sdk::i_client_dll* client;
+        sdk::i_global_vars* globals;
+        sdk::c_input* input;
+        sdk::i_client_entity_list* entity_list;
+        // ... more interfaces
+        
+        bool init();
+    };
+    ```
+    
+    Source: `globals/interfaces/interfaces.h:16-42`
+  </Step>
+  
+  <Step title="Hook Installation">
+    Hooks are installed using MinHook to intercept game functions:
+    
+    ```cpp
+    bool hooks::impl::init()
+    {
+        if (const auto status = MH_Initialize(); status != MH_OK) {
+            console::print<console::log_level::FATAL>(
+                _("hooks::impl::init() failed to initialize [ status: {} ]"), 
+                MH_StatusToString(status)
+            );
+            return false;
+        }
+        
+        // Install hooks
+        HOOK(hooks::create_move.create(
+            virtual_func::get(g_interfaces.client, 24), 
+            hooks::detours::create_move
+        ));
+        
+        console::print<console::log_level::SUCCESS>(_("Initialized all hooks."));
+        return true;
+    }
+    ```
+    
+    Source: `hooks/hooks.cpp:4-28`
+  </Step>
+</Steps>
+
+## Global Context System
+
+The SDK uses a global context (`g_ctx`) to maintain state across different hooks and features:
+
+```cpp
+namespace ctx
+{
+    struct impl {
+        bool init();
+        
+        sdk::c_cs_player* local = nullptr;           // Local player
+        sdk::c_user_cmd* cmd = nullptr;              // Current command
+        sdk::c_base_combat_weapon* weapon = nullptr; // Active weapon
+        lagcomp::record* record = nullptr;           // Lag compensation
+        
+        struct {
+            sdk::c_user_cmd* cmd = nullptr;
+            sdk::c_cs_player* local = nullptr;
+        } backup;
+        
+        math::vec2<int> screen_size = {};
+        math::matrix_4x4 view_matrix = {};
+        
+        bool running_post_think = false;
+        bool updating_animations = false;
+    };
+}
+
+inline ctx::impl g_ctx{};
+```
+
+Source: `globals/ctx/ctx.h:9-33`
+
+<Note>
+The context system provides centralized access to frequently used game objects and state, eliminating the need to pass parameters through multiple function calls.
+</Note>
+
+## Interface Management
+
+Game interfaces are accessed through the global `g_interfaces` object, which wraps Source Engine's interface system:
+
+```cpp
+inline sdk::interfaces g_interfaces;
+```
+
+Key interfaces include:
+
+- **device** - Direct3D9 device for rendering
+- **engine** - Engine client for game state
+- **client** - Client DLL for entity access
+- **globals** - Global variables (tick count, time, etc.)
+- **entity_list** - Access to all game entities
+- **prediction** - Client-side prediction system
+
+## Module System
+
+The module system provides utilities for working with game DLLs:
+
+```cpp
+inline modules::impl g_client_dll = modules::impl(CLIENT_DLL);
+inline modules::impl g_engine_dll = modules::impl(ENGINE_DLL);
+inline modules::impl g_material_system_dll = modules::impl(MATERIALSYSTEM_DLL);
+// ... more modules
+```
+
+Source: `utils/modules/modules.h:47-64`
+
+Each module provides pattern scanning and interface finding capabilities.
+
+## Feature Architecture
+
+Features are organized by category:
+
+<Tabs>
+  <Tab title="Combat">
+    - **Aimbot** - Automatic targeting system
+    - **Triggerbot** - Automatic firing
+    - **Lag Compensation** - Hit registration improvements
+  </Tab>
+  <Tab title="Visual">
+    - **ESP** - Entity visualization
+    - **Glow** - Player highlighting
+    - **Chams** - Material overrides
+  </Tab>
+  <Tab title="Movement">
+    - **Bunny hop** - Automatic jumping
+    - **Strafe** - Air movement optimization
+    - **Movement fixes** - View angle corrections
+  </Tab>
+  <Tab title="Misc">
+    - **Menu** - ImGui interface
+    - **Logging** - Debug and event logging
+    - **Prediction** - Client-side simulation
+  </Tab>
+</Tabs>
+
+## Dependencies
+
+The SDK includes several third-party libraries:
+
+| Library | Purpose |
+|---------|----------|
+| **MinHook** | Function hooking and detours |
+| **ImGui** | Menu and overlay rendering |
+| **FreeType** | Font rendering |
+| **nlohmann/json** | Configuration serialization |
+| **lazy_importer** | Import obfuscation |
+| **mocking_bird** | Exception handling |
+
+<Warning>
+Always ensure dependencies are properly initialized before using SDK features. Missing dependencies can cause crashes or undefined behavior.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Initialization Order">
+    Always initialize components in this order:
+    1. Console/logging system
+    2. Module handles
+    3. Game interfaces
+    4. Netvars
+    5. Hooks
+    6. Features
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    Use the `MOCKING_TRY` and `MOCKING_CATCH` macros for exception safety:
+    
+    ```cpp
+    bool hooks::impl::init()
+    {
+        MOCKING_TRY;
+        
+        // Initialization code...
+        
+        MOCKING_CATCH(return false);
+        return true;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Thread Safety">
+    Game functions are typically called from the game's main thread. Be cautious when accessing shared state from multiple threads.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Hooking" icon="link" href="/concepts/hooking">
+    Learn how to intercept and modify game functions
+  </Card>
+  <Card title="Memory" icon="memory" href="/concepts/memory">
+    Understand memory scanning and netvar management
+  </Card>
+</CardGroup>

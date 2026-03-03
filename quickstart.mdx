@@ -1,80 +1,451 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Inject the HotWheels SDK and start modifying CS:GO"
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
+Get HotWheels SDK running in Counter-Strike: Global Offensive in just a few steps.
 
-### Step 1: Set up your local environment
+<Warning>
+**Important**: Using this SDK in online matchmaking or VAC-secured servers will result in a permanent ban. Only use in offline mode or private servers for educational purposes.
+</Warning>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Prerequisites
 
-### Step 2: Deploy your changes
+Before proceeding, ensure you have:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Built the DLL">
+    Follow the [Installation Guide](/installation) to compile the SDK
+  </Step>
+  <Step title="CS:GO Installed">
+    Have Counter-Strike: Global Offensive installed via Steam
+  </Step>
+  <Step title="DLL Injector">
+    Have a DLL injector ready (see recommendations below)
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Step 1: Choose a DLL Injector
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+You need a DLL injector to load the HotWheels SDK into CS:GO's process space.
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Extreme Injector" icon="syringe">
+    **Recommended for beginners**
+    
+    - User-friendly interface
+    - Multiple injection methods
+    - Supports x86 and x64
+    
+    [Download](https://github.com/master131/ExtremeInjector)
+  </Card>
+  
+  <Card title="Xenos Injector" icon="syringe">
+    **Advanced option**
+    
+    - Manual map injection
+    - Stealth techniques
+    - More configuration options
+    
+    [Download](https://github.com/DarthTon/Xenos)
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Alternatively, you can write your own injector using `CreateRemoteThread` or manual mapping techniques.
 </Note>
+
+## Step 2: Launch CS:GO
+
+<Steps>
+  <Step title="Start in Windowed Mode">
+    Launch CS:GO with the following launch options for easier debugging:
+    
+    ```bash
+    -windowed -w 1280 -h 720 -novid -insecure
+    ```
+    
+    <Accordion title="Launch Option Explanations">
+      - `-windowed`: Run in windowed mode (easier to switch to injector)
+      - `-w 1280 -h 720`: Set resolution (adjust to your preference)
+      - `-novid`: Skip intro video
+      - `-insecure`: Disable VAC (prevents accidental online play)
+    </Accordion>
+  </Step>
+  
+  <Step title="Load into a Map">
+    Once in-game, load into any map:
+    
+    ```
+    Open Console (~)
+    Type: map de_dust2
+    ```
+    
+    Or start an offline game with bots through the UI.
+  </Step>
+  
+  <Step title="Wait for Full Load">
+    Ensure the game is fully loaded before injecting. You should:
+    - Be able to move around
+    - See the HUD
+    - Hear game sounds
+  </Step>
+</Steps>
+
+## Step 3: Inject the DLL
+
+<Tabs>
+  <Tab title="Using Extreme Injector">
+    <Steps>
+      <Step title="Launch Extreme Injector">
+        Run Extreme Injector as **Administrator** (required for process access)
+      </Step>
+      
+      <Step title="Select Process">
+        1. In the process list, find and select `csgo.exe`
+        2. If not visible, click "Refresh" or check "Show all processes"
+      </Step>
+      
+      <Step title="Select DLL">
+        Click "Select" and browse to your built DLL:
+        - Debug: `hw-sdk/debug/zipudhe2.dll`
+        - Release: `hw-sdk/release/chungy.dll`
+      </Step>
+      
+      <Step title="Configure Injection">
+        - **Injection Method**: LoadLibrary (standard)
+        - **Process**: csgo.exe
+        - Leave other options at default
+      </Step>
+      
+      <Step title="Inject">
+        Click **"Inject"** and wait for the success message
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Using Xenos Injector">
+    <Steps>
+      <Step title="Launch Xenos">
+        Run Xenos Injector as **Administrator**
+      </Step>
+      
+      <Step title="Select Process">
+        1. Click "Select" under Target Process
+        2. Choose `csgo.exe` from the list
+      </Step>
+      
+      <Step title="Add DLL">
+        1. Click "Add" under Image Files
+        2. Navigate to your DLL and select it
+      </Step>
+      
+      <Step title="Choose Injection Method">
+        For HotWheels SDK, use:
+        - **Method**: Normal (LoadLibrary)
+        - **Cloaking**: Optional (may help with some anti-cheats)
+      </Step>
+      
+      <Step title="Inject">
+        Click **"Inject"** and check the log for success
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Manual (Code)">
+    Here's a simple injector implementation:
+    
+    ```cpp
+    #include <Windows.h>
+    #include <TlHelp32.h>
+    
+    DWORD GetProcessId(const char* processName) {
+        PROCESSENTRY32 entry;
+        entry.dwSize = sizeof(PROCESSENTRY32);
+        
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        
+        if (Process32First(snapshot, &entry)) {
+            do {
+                if (_stricmp(entry.szExeFile, processName) == 0) {
+                    CloseHandle(snapshot);
+                    return entry.th32ProcessID;
+                }
+            } while (Process32Next(snapshot, &entry));
+        }
+        
+        CloseHandle(snapshot);
+        return 0;
+    }
+    
+    bool InjectDLL(DWORD processId, const char* dllPath) {
+        HANDLE hProcess = OpenProcess(
+            PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | 
+            PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
+            FALSE, processId
+        );
+        
+        if (!hProcess) return false;
+        
+        LPVOID pDllPath = VirtualAllocEx(hProcess, 0, strlen(dllPath) + 1,
+                                         MEM_COMMIT, PAGE_READWRITE);
+        
+        WriteProcessMemory(hProcess, pDllPath, (LPVOID)dllPath, 
+                          strlen(dllPath) + 1, 0);
+        
+        HANDLE hThread = CreateRemoteThread(hProcess, 0, 0,
+            (LPTHREAD_START_ROUTINE)GetProcAddress(
+                GetModuleHandleA("Kernel32.dll"), "LoadLibraryA"
+            ),
+            pDllPath, 0, 0
+        );
+        
+        CloseHandle(hProcess);
+        return hThread != NULL;
+    }
+    
+    int main() {
+        DWORD pid = GetProcessId("csgo.exe");
+        if (pid == 0) {
+            printf("CS:GO not found!\n");
+            return 1;
+        }
+        
+        if (InjectDLL(pid, "C:\\path\\to\\zipudhe2.dll")) {
+            printf("Successfully injected!\n");
+        } else {
+            printf("Injection failed!\n");
+        }
+        
+        return 0;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Step 4: Verify Injection
+
+After injection, verify the SDK is loaded:
+
+<Steps>
+  <Step title="Check for Console (Debug Build Only)">
+    If you injected the **Debug** build (`zipudhe2.dll`), a console window should appear showing:
+    
+    ```
+    [+] Initializing HotWheels SDK...
+    [+] Config initialized
+    [+] CS:GO initialized
+    [+] Context initialized
+    [+] Interfaces initialized
+    [+] Hooks initialized
+    [+] Particle system initialized
+    ```
+    
+    <Note>
+    Release builds do NOT show a console window.
+    </Note>
+  </Step>
+  
+  <Step title="Open the Menu">
+    Press the **INSERT** key to toggle the ImGui menu interface.
+    
+    You should see the HotWheels menu with tabs for:
+    - Aimbot settings
+    - Visual features
+    - Movement options
+    - Configuration management
+  </Step>
+  
+  <Step title="Test a Feature">
+    Try enabling a simple feature to confirm everything works:
+    
+    1. Open menu (INSERT)
+    2. Navigate to Visuals tab
+    3. Enable "ESP" or "Glow"
+    4. Close menu (INSERT)
+    5. Verify the feature is working in-game
+  </Step>
+</Steps>
+
+## Step 5: Unload the SDK
+
+To safely unload HotWheels from CS:GO:
+
+<CodeGroup>
+```text Keyboard Shortcut
+Press DELETE key
+```
+
+```cpp Unload Flow
+// The SDK registers this keybind during initialization
+g_input.add_keybind(VK_DELETE, [](bool pressed) -> void {
+    HANDLE thread = CreateThread(
+        nullptr, 0, 
+        reinterpret_cast<LPTHREAD_START_ROUTINE>(unload), 
+        nullptr, 0, nullptr
+    );
+    
+    if (thread)
+        CloseHandle(thread);
+});
+
+// Unload sequence
+DWORD WINAPI hotwheels::unload(DWORD exit_code)
+{
+    g_hooks.unload();      // Remove all hooks
+    g_csgo.unload();       // Clean up CS:GO state
+    
+    FreeLibraryAndExitThread(handle, exit_code);
+    return exit_code;
+}
+```
+</CodeGroup>
+
+<Warning>
+Always unload the SDK before closing CS:GO to prevent crashes.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Injection succeeds but nothing happens" icon="circle-question">
+    **Possible causes**:
+    1. **Wrong architecture**: Ensure you built x86 (Win32), not x64
+    2. **Game not fully loaded**: Wait until you're in a map
+    3. **Blocked by antivirus**: Add exception for the DLL
+    4. **Missing dependencies**: Verify DirectX 9 runtime is installed
+    
+    **Debug steps**:
+    - Use Debug build to see console output
+    - Check Windows Event Viewer for crash logs
+    - Use Process Explorer to verify DLL is loaded in csgo.exe
+  </Accordion>
+  
+  <Accordion title="CS:GO crashes on injection" icon="circle-question">
+    **Possible causes**:
+    1. **Inject too early**: Game modules not loaded yet
+    2. **Conflicting hooks**: Another cheat/mod already loaded
+    3. **Corrupted build**: Clean and rebuild the project
+    
+    **Solutions**:
+    - Wait 10-15 seconds after map load before injecting
+    - Disable other overlays (Discord, Steam, etc.)
+    - Try Release build instead of Debug
+    - Check the initialization in `hotwheels::init()` - it waits for serverbrowser.dll
+  </Accordion>
+  
+  <Accordion title="Menu doesn't open with INSERT" icon="circle-question">
+    **Possible causes**:
+    1. **Menu initialization failed**: Check console output
+    2. **Input system not hooked**: EndScene hook may have failed
+    3. **Key conflict**: Another program using INSERT
+    
+    **Solutions**:
+    - Check Debug console for initialization errors
+    - Try pressing INSERT multiple times
+    - Look for `g_menu.init_input()` success message
+    - Verify ImGui is rendering in EndScene hook
+  </Accordion>
+  
+  <Accordion title="Features don't work" icon="circle-question">
+    **Possible causes**:
+    1. **Hooks not installed**: Check `g_hooks.init()` success
+    2. **Offsets outdated**: CS:GO updated, need new signatures
+    3. **Feature disabled in config**: Check menu settings
+    
+    **Debug**:
+    - Enable debug logging in features
+    - Verify CreateMove hook is being called
+    - Check interface pointers are valid
+    - Update pattern signatures after CS:GO updates
+  </Accordion>
+  
+  <Accordion title="Unload causes crash" icon="circle-question">
+    **Possible causes**:
+    1. **Hooks not fully removed**: Race condition
+    2. **Threads still running**: Features not stopped
+    
+    **Prevention**:
+    - Wait a few seconds after pressing DELETE
+    - Don't use features while unloading
+    - Ensure `g_hooks.unload()` completes before FreeLibrary
+  </Accordion>
+</AccordionGroup>
+
+## Usage Tips
+
+<Note>
+**Best Practices**:
+
+1. **Always use `-insecure` launch option** to prevent VAC connection
+2. **Test new features offline first** before using in private servers
+3. **Create configuration backups** - configs save to `csgo/hotwheels/configs/`
+4. **Update after CS:GO patches** - offsets and signatures may break
+5. **Use Debug builds for development** - easier to diagnose issues
+</Note>
+
+## Key Bindings
+
+| Key | Action |
+|-----|--------|
+| **INSERT** | Toggle menu |
+| **DELETE** | Unload SDK |
+| **Arrow Keys** | Navigate menu (when open) |
+| **Mouse** | Click menu items |
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Explore Features" icon="rocket" href="#">
+    Learn about aimbot, ESP, movement, and other features
+  </Card>
+  <Card title="Configuration" icon="gear" href="#">
+    Set up and manage your configuration files
+  </Card>
+  <Card title="Hooks Reference" icon="link" href="#">
+    Understand the hooking system and add custom hooks
+  </Card>
+  <Card title="API Documentation" icon="book" href="#">
+    Dive into the SDK's classes and utilities
+  </Card>
+</CardGroup>
+
+## Example: First Custom Feature
+
+Here's a simple example to get you started:
+
+```cpp
+// In hooks/create_move/create_move.cpp
+void __stdcall hooks::create_move(int sequence_number, float input_sample_time, bool active)
+{
+    // Call original first
+    o_create_move(sequence_number, input_sample_time, active);
+    
+    // Get user command
+    auto cmd = g_interfaces.input->get_user_cmd(sequence_number);
+    if (!cmd || !cmd->command_number)
+        return;
+    
+    // Get local player
+    auto local = g_ctx.local();
+    if (!local || !local->is_alive())
+        return;
+    
+    // Simple bunny hop
+    if (g_config.movement.bunny_hop) {
+        if (!(local->flags() & FL_ONGROUND))
+            cmd->buttons &= ~IN_JUMP;
+    }
+    
+    // Your custom feature here!
+    if (GetAsyncKeyState(VK_SPACE)) {
+        console::print<console::log_level::info>("Space pressed!");
+    }
+}
+```
+
+<Card title="Ready to develop?" icon="code" href="#">
+  Explore the SDK architecture and start building your own features
+</Card>

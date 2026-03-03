@@ -1,0 +1,266 @@
+---
+title: "DrawModelExecute Hook"
+description: "Hook into 3D model rendering to modify materials and create visual effects"
+---
+
+## Overview
+
+The `draw_model_execute` hook is called when the game renders 3D models, allowing you to override materials, create chams (colored overlays), and apply custom visual effects to player models and weapons.
+
+<Note>
+  This hook is called at virtual table index 21 of the `i_model_render` interface.
+</Note>
+
+## Hook Signature
+
+```cpp
+void __fastcall draw_model_execute_detour(
+    void* ecx,
+    void* edx,
+    void* context,
+    void* state,
+    sdk::model_render_info& info,
+    math::matrix_3x4* custom_bone_to_world
+)
+```
+
+### Parameters
+
+<ParamField path="ecx" type="void*">
+  ECX register (fastcall convention) - pointer to the interface
+</ParamField>
+
+<ParamField path="edx" type="void*">
+  EDX register (fastcall convention) - not used
+</ParamField>
+
+<ParamField path="context" type="void*">
+  Rendering context
+</ParamField>
+
+<ParamField path="state" type="void*">
+  Rendering state
+</ParamField>
+
+<ParamField path="info" type="sdk::model_render_info&">
+  Information about the model being rendered, including model pointer and entity index
+</ParamField>
+
+<ParamField path="custom_bone_to_world" type="math::matrix_3x4*">
+  Custom bone transformation matrices, or nullptr to use default
+</ParamField>
+
+## When It's Called
+
+This hook is invoked every time a 3D model is rendered, including:
+- Player models
+- Weapon models
+- World objects
+- Particle effects
+
+## Common Use Cases
+
+### Identifying Model Types
+
+Filter models by checking the model name:
+
+```cpp
+bool model_is_player = strstr(info.model->name, _("models/player"));
+bool model_is_weapon = strstr(info.model->name, _("weapons/v_"));
+```
+
+### Creating Custom Materials
+
+Create and cache custom materials for visual effects:
+
+```cpp
+static sdk::i_material* animated_wireframe{};
+static sdk::i_material* material_regular{};
+static sdk::i_material* material_flat{};
+
+if (!animated_wireframe) {
+    // Create VMT file
+    std::ofstream(_("csgo/materials/animated_wireframe.vmt")) << _(R"#("UnlitGeneric" {
+        "$basetexture" "models/inventory_items/dreamhack_trophies/dreamhack_star_blur"
+        "$wireframe" "1"
+        "$alpha" "0.6"
+        "$additive" "1"
+        "$ignorez" "1"
+        "proxies" {
+            "texturescroll" {
+                "texturescrollvar" "$basetexturetransform"
+                "texturescrollrate" "0.2"
+                "texturescrollangle" "90"
+            }
+        }
+    })#");
+}
+
+animated_wireframe = g_interfaces.material_system->find_material(_("animated_wireframe"));
+material_regular = g_interfaces.material_system->find_material(_("debug/debugambientcube"));
+material_flat = g_interfaces.material_system->find_material(_("debug/debugdrawflat"));
+```
+
+### Player Model Chams
+
+Apply colored overlays to player models:
+
+```cpp
+if (model_is_player && info.entity_index >= 0 && info.entity_index <= 64) {
+    material_regular->color_modulate(99 / 255.f, 0 / 255.f, 114 / 255.f);
+    material_regular->set_material_var_flag(sdk::MATERIAL_VAR_IGNOREZ, true);
+    
+    g_interfaces.model_render->forced_material_override(material_regular);
+    
+    draw_model_execute_hook.call_original<void>(
+        ecx, edx, context, state, info, custom_bone_to_world
+    );
+    
+    g_interfaces.model_render->forced_material_override(nullptr);
+}
+```
+
+### Lag Compensation Visualization
+
+Render backtrack positions for lag compensation:
+
+```cpp
+if (model_is_player && info.entity_index >= 0 && info.entity_index <= 64) {
+    static auto unlag_pointer = g_convars[_("sv_maxunlag")];
+    auto sv_maxunlag_ticks = sdk::time_to_ticks(unlag_pointer->get_float());
+    
+    for (int i = 0; i < sv_maxunlag_ticks; i++) {
+        auto current_record = &g_lagcomp.heap_records[info.entity_index][i];
+        
+        // Render with gradient color based on age
+        const int green = static_cast<int>((i + 1) * 3 * 2.55f);
+        
+        material_regular->color_modulate(
+            (255 - green) / 255.f, 
+            green / 255.f, 
+            0.7058f
+        );
+        material_regular->alpha_modulate(0.7f);
+        
+        // Draw using backtrack bone matrix
+        draw_model_execute_hook.call_original<void>(
+            ecx, edx, context, state, info, current_record->bone_matrix
+        );
+    }
+}
+```
+
+### Weapon Chams
+
+Apply animated materials to viewmodel weapons:
+
+```cpp
+if (model_is_weapon) {
+    animated_wireframe->color_modulate(0 / 255.f, 255 / 255.f, 255 / 255.f);
+    animated_wireframe->set_material_var_flag(sdk::MATERIAL_VAR_IGNOREZ, false);
+    
+    g_interfaces.model_render->forced_material_override(animated_wireframe);
+    
+    draw_model_execute_hook.call_original<void>(
+        ecx, edx, context, state, info, custom_bone_to_world
+    );
+    
+    g_interfaces.model_render->forced_material_override(nullptr);
+}
+```
+
+<Warning>
+  Always reset material overrides after rendering:
+  ```cpp
+  g_interfaces.model_render->forced_material_override(nullptr);
+  ```
+  
+  Failing to do so will cause all subsequent models to use your custom material.
+</Warning>
+
+## Material Flags
+
+Common material flags you can modify:
+
+- `MATERIAL_VAR_IGNOREZ` - Render through walls (ignores depth buffer)
+- `MATERIAL_VAR_WIREFRAME` - Render as wireframe
+- `MATERIAL_VAR_FLAT` - Flat shading
+- `MATERIAL_VAR_ADDITIVE` - Additive blending
+
+## Implementation Example
+
+<CodeGroup>
+```cpp draw_model_execute.h
+CREATE_HOOK_HELPER(
+    draw_model_execute_hook,
+    void(__fastcall)(void*, void*, void*, void*, 
+                     sdk::model_render_info&, math::matrix_3x4*)
+);
+
+static void __fastcall draw_model_execute_detour(
+    void* ecx,
+    void* edx,
+    void* context,
+    void* state,
+    sdk::model_render_info& info,
+    math::matrix_3x4* custom_bone_to_world
+);
+```
+
+```cpp draw_model_execute.cpp
+void __fastcall hooks::draw_model_execute::draw_model_execute_detour(
+    void* ecx,
+    void* edx,
+    void* context,
+    void* state,
+    sdk::model_render_info& info,
+    math::matrix_3x4* custom_bone_to_world
+)
+{
+    static sdk::i_material* material_regular{};
+    
+    if (!material_regular)
+        material_regular = g_interfaces.material_system->find_material(
+            _("debug/debugambientcube")
+        );
+    
+    bool model_is_player = strstr(info.model->name, _("models/player"));
+    
+    if (model_is_player) {
+        // Apply chams
+        material_regular->color_modulate(1.0f, 0.0f, 0.5f);
+        g_interfaces.model_render->forced_material_override(material_regular);
+    }
+    
+    draw_model_execute_hook.call_original<void>(
+        ecx, edx, context, state, info, custom_bone_to_world
+    );
+    
+    if (model_is_player)
+        g_interfaces.model_render->forced_material_override(nullptr);
+}
+```
+</CodeGroup>
+
+## Source Files
+
+- Header: `globals/hooks/draw_model_execute/draw_model_execute.h:16-30`
+- Implementation: `globals/hooks/draw_model_execute/draw_model_execute.cpp:6-99`
+
+## Initialization
+
+```cpp
+void init()
+{
+    hooks::draw_model_execute_hook.create(
+        virtual_func::get(g_interfaces.model_render, 21),
+        draw_model_execute_detour,
+        _("draw_model_execute_detour")
+    );
+}
+```
+
+## See Also
+
+- [Paint Traverse](/api/hooks/paint-traverse) - For 2D overlay rendering
+- [Frame Stage Notify](/api/hooks/frame-stage-notify) - For frame-based updates

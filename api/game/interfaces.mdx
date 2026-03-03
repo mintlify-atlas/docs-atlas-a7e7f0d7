@@ -1,0 +1,607 @@
+---
+title: "Game Interfaces"
+description: "Core game interfaces including entity list, engine trace, engine client, and material system"
+---
+
+## i_client_entity_list
+
+Provides access to all client-side entities in the game world.
+
+**Source:** `game/sdk/classes/i_client_entity_list.h:13`
+
+### Virtual Methods
+
+<ResponseField name="get_client_networkable" type="sdk::i_client_networkable">
+  Gets the networkable interface for an entity by index
+  
+  **Parameters:**
+  - `index` - Entity index (1-64 for players, 0+ for all entities)
+  
+  **Returns:** Networkable interface
+  
+  **Virtual Index:** 0
+</ResponseField>
+
+<ResponseField name="get_client_networkable_from_handle" type="sdk::i_client_networkable">
+  Gets the networkable interface from an entity handle
+  
+  **Parameters:**
+  - `handle` - Entity handle
+  
+  **Returns:** Networkable interface
+  
+  **Virtual Index:** 1
+</ResponseField>
+
+<ResponseField name="get_client_unknown_from_handle" type="sdk::i_client_unknown">
+  Gets the unknown interface from an entity handle
+  
+  **Parameters:**
+  - `handle` - Entity handle
+  
+  **Returns:** Unknown interface
+  
+  **Virtual Index:** 2
+</ResponseField>
+
+<ResponseField name="number_of_entities" type="int">
+  Gets the total number of entities
+  
+  **Parameters:**
+  - `include_non_networkable` - Whether to include non-networked entities
+  
+  **Returns:** Entity count
+  
+  **Virtual Index:** 6
+  
+  ```cpp
+  int entity_count = g_interfaces.entity_list->number_of_entities(true);
+  ```
+</ResponseField>
+
+<ResponseField name="get_highest_entity_index" type="int">
+  Gets the highest valid entity index
+  
+  **Returns:** Maximum entity index in use
+  
+  **Virtual Index:** 7
+  
+  ```cpp
+  int max_index = g_interfaces.entity_list->get_highest_entity_index();
+  for (int i = 0; i <= max_index; i++) {
+      // Iterate entities
+  }
+  ```
+</ResponseField>
+
+### Template Methods
+
+<ResponseField name="get_client_entity<T>" type="T">
+  Gets an entity by index and casts it to the specified type
+  
+  **Template Parameter:** `T` - Entity type to cast to
+  
+  **Parameters:**
+  - `index` - Entity index
+  
+  **Returns:** Entity pointer of type `T`
+  
+  ```cpp
+  auto player = g_interfaces.entity_list->get_client_entity<c_cs_player*>(5);
+  if (player && player->is_alive()) {
+      // Process player
+  }
+  ```
+  
+  <Note>
+    This is a templated wrapper around the private `private_get_client_entity` method that provides type-safe casting.
+  </Note>
+</ResponseField>
+
+<ResponseField name="get_client_entity_from_handle<T>" type="T">
+  Gets an entity from a handle and casts it to the specified type
+  
+  **Template Parameter:** `T` - Entity type to cast to
+  
+  **Parameters:**
+  - `handle` - Entity handle
+  
+  **Returns:** Entity pointer of type `T`
+  
+  ```cpp
+  auto weapon_handle = player->active_weapon();
+  auto weapon = g_interfaces.entity_list->get_client_entity_from_handle<c_base_combat_weapon*>(weapon_handle);
+  ```
+</ResponseField>
+
+---
+
+## i_engine_trace
+
+Provides ray tracing and collision detection functionality.
+
+**Source:** `game/sdk/classes/i_engine_trace.h:197`
+
+### Classes and Structures
+
+#### ray_t
+
+Represents a ray for collision tracing.
+
+**Source:** `game/sdk/classes/i_engine_trace.h:11`
+
+<ParamField path="start" type="math::vec3">
+  Starting position of the ray (16-byte aligned)
+</ParamField>
+
+<ParamField path="delta" type="math::vec3">
+  Direction and distance vector (16-byte aligned)
+</ParamField>
+
+<ParamField path="start_offset" type="math::vec3">
+  Offset from start position (16-byte aligned)
+</ParamField>
+
+<ParamField path="extents" type="math::vec3">
+  Half-size of bounding box for swept box traces (16-byte aligned)
+</ParamField>
+
+<ParamField path="is_ray" type="bool">
+  `true` if this is a ray, `false` if it's a swept box
+</ParamField>
+
+<ParamField path="is_swept" type="bool">
+  `true` if the ray has non-zero length
+</ParamField>
+
+**Methods:**
+
+<ResponseField name="init" type="void">
+  Initialize a ray trace from start to end
+  
+  **Parameters:**
+  - `m_start` - Start position
+  - `m_end` - End position
+  
+  ```cpp
+  ray_t ray;
+  ray.init(start_pos, end_pos);
+  ```
+  
+  <Expandable title="Init with bounding box">
+    Initialize a swept box trace
+    
+    **Parameters:**
+    - `m_start` - Start position
+    - `m_end` - End position
+    - `m_mins` - Minimum extents of box
+    - `m_maxs` - Maximum extents of box
+    
+    ```cpp
+    ray_t ray;
+    ray.init(start, end, mins, maxs);
+    ```
+  </Expandable>
+</ResponseField>
+
+#### c_game_trace
+
+Contains results from a trace operation.
+
+**Source:** `game/sdk/classes/i_engine_trace.h:87`
+
+**Inherits:** `c_base_trace`
+
+<ParamField path="fraction" type="float">
+  Fraction of trace completed (0.0 to 1.0, where 1.0 = no hit)
+</ParamField>
+
+<ParamField path="fraction_left_solid" type="float">
+  Fraction when leaving solid space
+</ParamField>
+
+<ParamField path="surface" type="surface_t">
+  Surface properties of what was hit
+</ParamField>
+
+<ParamField path="hit_group" type="int">
+  Hitgroup that was hit (head, chest, etc.)
+</ParamField>
+
+<ParamField path="entity" type="c_base_player*">
+  Entity that was hit
+</ParamField>
+
+<ParamField path="hitbox" type="int">
+  Hitbox index that was hit
+</ParamField>
+
+**Methods:**
+
+<ResponseField name="did_hit" type="bool">
+  Checks if the trace hit anything
+  
+  **Returns:** `true` if trace hit something (fraction < 1 or started in solid)
+  
+  ```cpp
+  if (trace.did_hit()) {
+      // Ray hit something
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="dit_hit_world" type="bool">
+  Checks if trace hit the world (static geometry)
+  
+  **Returns:** `true` if world was hit
+</ResponseField>
+
+<ResponseField name="did_hit_non_world_entity" type="bool">
+  Checks if trace hit an entity (not world)
+  
+  **Returns:** `true` if entity was hit
+</ResponseField>
+
+<ResponseField name="is_visible" type="bool">
+  Checks if trace endpoint is visible (fraction > 0.97)
+  
+  **Returns:** `true` if mostly visible
+</ResponseField>
+
+#### Trace Filters
+
+**c_trace_filter**
+
+Basic trace filter that skips a single entity.
+
+```cpp
+c_trace_filter filter;
+filter.skip = local_player;
+g_interfaces.engine_trace->trace_ray(ray, MASK_PLAYERSOLID, &filter, &trace);
+```
+
+**c_trace_filter_skip_two_entities**
+
+Skips two entities during trace.
+
+```cpp
+c_trace_filter_skip_two_entities filter(player1, player2);
+```
+
+**c_trace_filter_skip_grenades**
+
+Skips grenade entities during trace.
+
+**c_trace_filter_whitelist**
+
+Only hits a specific whitelisted entity.
+
+```cpp
+c_trace_filter_whitelist filter;
+filter.whitelist = target_player;
+```
+
+### Virtual Methods
+
+<ResponseField name="get_point_contents" type="int">
+  Gets the contents mask at a point
+  
+  **Parameters:**
+  - `vec_abs_pos` - World position to check
+  - `content_mask` - Contents mask filter (default: MASK_ALL)
+  - `entity` - Optional pointer to receive entity at point
+  
+  **Returns:** Contents flags
+  
+  **Virtual Index:** 0
+</ResponseField>
+
+<ResponseField name="trace_ray" type="void">
+  Performs a ray trace
+  
+  **Parameters:**
+  - `ray` - Ray to trace
+  - `fmask` - Contents mask (MASK_PLAYERSOLID, MASK_SHOT, etc.)
+  - `trace_filter` - Filter to skip entities
+  - `trace` - Output trace results
+  
+  **Virtual Index:** 5
+  
+  ```cpp
+  ray_t ray;
+  ray.init(start, end);
+  
+  c_game_trace trace;
+  c_trace_filter filter;
+  filter.skip = local_player;
+  
+  g_interfaces.engine_trace->trace_ray(ray, sdk::MASK_PLAYERSOLID, &filter, &trace);
+  
+  if (trace.did_hit()) {
+      // Process hit
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="clip_ray_to_entity" type="void">
+  Traces a ray against a specific entity
+  
+  **Parameters:**
+  - `ray` - Ray to trace
+  - `fmask` - Contents mask
+  - `entity` - Specific entity to trace against
+  - `trace` - Output trace results
+  
+  **Virtual Index:** 3
+</ResponseField>
+
+---
+
+## iv_engine_client
+
+Main engine client interface providing access to game state, player info, and engine functions.
+
+**Source:** `game/sdk/classes/iv_engine_client.h:8`
+
+### Methods
+
+<ResponseField name="get_screen_size" type="void">
+  Gets the screen dimensions
+  
+  **Parameters:**
+  - `w` - Output width
+  - `h` - Output height
+  
+  **Virtual Index:** 5
+  
+  ```cpp
+  int width, height;
+  g_interfaces.engine->get_screen_size(width, height);
+  ```
+</ResponseField>
+
+<ResponseField name="get_player_info" type="bool">
+  Gets player information by index
+  
+  **Parameters:**
+  - `index` - Player index
+  - `info` - Output player info structure
+  
+  **Returns:** `true` if player info was retrieved
+  
+  **Virtual Index:** 8
+  
+  ```cpp
+  sdk::player_info_t info;
+  if (g_interfaces.engine->get_player_info(i, &info)) {
+      std::string name = info.name;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="get_local_player" type="int">
+  Gets the local player's entity index
+  
+  **Returns:** Local player index
+  
+  **Virtual Index:** 12
+  
+  ```cpp
+  int local_index = g_interfaces.engine->get_local_player();
+  auto local = g_interfaces.entity_list->get_client_entity<c_cs_player*>(local_index);
+  ```
+</ResponseField>
+
+<ResponseField name="get_view_angles" type="math::vec3&">
+  Gets the current view angles
+  
+  **Returns:** Reference to view angles
+  
+  **Virtual Index:** 18
+</ResponseField>
+
+<ResponseField name="set_view_angles" type="void">
+  Sets the view angles
+  
+  **Parameters:**
+  - `ang` - New view angles
+  
+  **Virtual Index:** 19
+  
+  ```cpp
+  math::vec3 angles{0.0f, 90.0f, 0.0f};
+  g_interfaces.engine->set_view_angles(angles);
+  ```
+</ResponseField>
+
+<ResponseField name="get_max_clients" type="int">
+  Gets the maximum number of clients/players
+  
+  **Returns:** Max client count (typically 64)
+  
+  **Virtual Index:** 20
+</ResponseField>
+
+<ResponseField name="is_in_game" type="bool">
+  Checks if currently in a game
+  
+  **Returns:** `true` if in game
+  
+  **Virtual Index:** 26
+</ResponseField>
+
+<ResponseField name="is_connected" type="bool">
+  Checks if connected to a server
+  
+  **Returns:** `true` if connected
+  
+  **Virtual Index:** 27
+</ResponseField>
+
+<ResponseField name="is_fully_connected" type="bool">
+  Checks if fully connected (connected, in game, not watching demo)
+  
+  **Returns:** `true` if fully connected
+  
+  ```cpp
+  if (!g_interfaces.engine->is_fully_connected())
+      return;
+  ```
+</ResponseField>
+
+<ResponseField name="world_to_screen_matrix" type="const math::matrix_4x4&">
+  Gets the world-to-screen transformation matrix
+  
+  **Returns:** 4x4 transformation matrix
+  
+  **Virtual Index:** 37
+  
+  ```cpp
+  const auto& matrix = g_interfaces.engine->world_to_screen_matrix();
+  // Use for world-to-screen conversions
+  ```
+</ResponseField>
+
+<ResponseField name="get_level_name" type="const char*">
+  Gets the current map name (full path)
+  
+  **Returns:** Map name string
+  
+  **Virtual Index:** 52
+</ResponseField>
+
+<ResponseField name="get_level_name_short" type="const char*">
+  Gets the current map name (short version)
+  
+  **Returns:** Short map name
+  
+  **Virtual Index:** 53
+</ResponseField>
+
+<ResponseField name="execute_client_cmd" type="void">
+  Executes a client command
+  
+  **Parameters:**
+  - `st` - Command string
+  
+  **Virtual Index:** 108
+  
+  ```cpp
+  g_interfaces.engine->execute_client_cmd("say Hello");
+  ```
+</ResponseField>
+
+<ResponseField name="client_cmd_unrestricted" type="void">
+  Executes an unrestricted client command (bypasses some restrictions)
+  
+  **Parameters:**
+  - `st` - Command string
+  - `from_console_or_keybind` - Whether command is from console/keybind
+  
+  **Virtual Index:** 114
+</ResponseField>
+
+---
+
+## i_material_system
+
+Material system interface for texture and material management.
+
+**Source:** `game/sdk/classes/i_material_system.h:9`
+
+### Methods
+
+<ResponseField name="find_material" type="sdk::i_material*">
+  Finds a material by name
+  
+  **Parameters:**
+  - `name` - Material name
+  - `group_name` - Material group (optional)
+  - `complain` - Log error if not found (default: true)
+  - `complain_prefix` - Error message prefix (optional)
+  
+  **Returns:** Material pointer or `nullptr`
+  
+  **Virtual Index:** 84
+  
+  ```cpp
+  auto material = g_interfaces.material_system->find_material("models/player", nullptr);
+  ```
+</ResponseField>
+
+<ResponseField name="find_texture" type="sdk::i_texture*">
+  Finds a texture by name
+  
+  **Parameters:**
+  - `name` - Texture name
+  - `group_name` - Texture group
+  - `complain` - Log error if not found (default: true)
+  - `unk` - Unknown parameter (default: 1)
+  
+  **Returns:** Texture pointer or `nullptr`
+  
+  **Virtual Index:** 91
+</ResponseField>
+
+<ResponseField name="get_render_context" type="sdk::i_mat_render_ctx*">
+  Gets the material render context for rendering operations
+  
+  **Returns:** Render context pointer
+  
+  **Virtual Index:** 115
+</ResponseField>
+
+---
+
+## Usage Examples
+
+### Entity iteration
+
+```cpp
+int max_clients = g_interfaces.engine->get_max_clients();
+
+for (int i = 1; i <= max_clients; i++) {
+    auto player = g_interfaces.entity_list->get_client_entity<c_cs_player*>(i);
+    
+    if (!player || !player->is_alive())
+        continue;
+        
+    // Process player
+}
+```
+
+### Ray tracing for visibility
+
+```cpp
+ray_t ray;
+ray.init(local_player->eye_position(), enemy->eye_position());
+
+c_game_trace trace;
+c_trace_filter filter;
+filter.skip = local_player;
+
+g_interfaces.engine_trace->trace_ray(ray, sdk::MASK_PLAYERSOLID, &filter, &trace);
+
+if (trace.did_hit() && trace.entity == enemy) {
+    // Direct line of sight to enemy
+}
+```
+
+### Getting player information
+
+```cpp
+int max_clients = g_interfaces.engine->get_max_clients();
+
+for (int i = 1; i <= max_clients; i++) {
+    sdk::player_info_t info;
+    if (!g_interfaces.engine->get_player_info(i, &info))
+        continue;
+        
+    std::string name = info.name;
+    // Use player info
+}
+```
+
+<Warning>
+  Always validate entity pointers before use. Entity indices can be invalid or point to deleted entities.
+</Warning>

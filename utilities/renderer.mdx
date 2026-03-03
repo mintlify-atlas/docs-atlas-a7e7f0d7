@@ -1,0 +1,441 @@
+---
+title: "Renderer"
+description: "Direct3D9 rendering utilities for drawing overlays and UI elements"
+---
+
+The renderer utility provides a high-level interface for Direct3D9 rendering operations, including primitive shapes, text, gradients, and curves.
+
+## Initialization
+
+### init
+
+Initialize the renderer with a Direct3D9 device.
+
+```cpp
+void impl::init(IDirect3DDevice9* buffer_device)
+```
+
+<ParamField path="buffer_device" type="IDirect3DDevice9*">
+  The Direct3D9 device to use for rendering
+</ParamField>
+
+<Note>
+  Call this once during SDK initialization, typically in your EndScene hook.
+</Note>
+
+## State Management
+
+### setup_state / finish_state
+
+Manage render states for drawing.
+
+```cpp
+g_render.setup_state();
+// Perform all drawing operations
+g_render.finish_state();
+```
+
+<Tip>
+  Always wrap your rendering code between `setup_state()` and `finish_state()` to preserve game's render state.
+</Tip>
+
+## Primitive Shapes
+
+### render_line
+
+Draw a line between two points.
+
+```cpp
+void render_line(int x, int y, int width, int height, color color)
+```
+
+```cpp
+g_render.render_line(100, 100, 200, 100, color::white());
+```
+
+<ParamField path="x" type="int">
+  Starting X coordinate
+</ParamField>
+
+<ParamField path="y" type="int">
+  Starting Y coordinate
+</ParamField>
+
+<ParamField path="width" type="int">
+  Ending X coordinate
+</ParamField>
+
+<ParamField path="height" type="int">
+  Ending Y coordinate
+</ParamField>
+
+### render_rectangle
+
+Draw an outlined rectangle.
+
+```cpp
+void render_rectangle(int x, int y, int width, int height, color color)
+template<class T>
+void render_rectangle(const math::vec2<T>& pos, const math::vec2<T>& size, color color)
+```
+
+<CodeGroup>
+```cpp Coordinate Version
+g_render.render_rectangle(100, 100, 200, 150, color::white());
+```
+
+```cpp Vector Version
+math::vec2<int> pos(100, 100);
+math::vec2<int> size(200, 150);
+g_render.render_rectangle(pos, size, color::white());
+```
+</CodeGroup>
+
+### render_filled_rectangle
+
+Draw a filled rectangle.
+
+```cpp
+void render_filled_rectangle(int x, int y, int width, int height, color color)
+template<class T>
+void render_filled_rectangle(const math::vec2<T>& pos, const math::vec2<T>& size, color color)
+```
+
+```cpp
+g_render.render_filled_rectangle(100, 100, 200, 150, color(50, 50, 50, 200));
+```
+
+### render_circle
+
+Draw a circle outline.
+
+```cpp
+void render_circle(int x, int y, int radius, int segments, color color)
+template<class T>
+void render_circle(const math::vec2<T>& pos, const math::vec2<T>& size, color color)
+```
+
+```cpp
+g_render.render_circle(400, 300, 50, 32, color::red());
+```
+
+<ParamField path="segments" type="int">
+  Number of line segments (higher = smoother circle, 32 recommended)
+</ParamField>
+
+## Gradients
+
+### render_gradient
+
+Draw a gradient-filled rectangle.
+
+```cpp
+template<auto gradient_type = gradient_type_t::HORIZONTAL>
+void render_gradient(int x, int y, int width, int height, color from, color to)
+```
+
+<CodeGroup>
+```cpp Horizontal Gradient
+g_render.render_gradient<gradient_type_t::HORIZONTAL>(
+    100, 100, 200, 50, 
+    color::red(), color::blue()
+);
+```
+
+```cpp Vertical Gradient
+g_render.render_gradient<gradient_type_t::VERTICAL>(
+    100, 100, 200, 50, 
+    color(255, 0, 0), color(0, 0, 255)
+);
+```
+</CodeGroup>
+
+## Text Rendering
+
+### render_text_size
+
+Calculate the dimensions of rendered text.
+
+```cpp
+D3DXVECTOR2 render_text_size(const char* string, LPD3DXFONT font)
+```
+
+```cpp
+auto size = g_render.render_text_size("Hello World", g_fonts[HASH("Verdana")]);
+int width = size.x;
+int height = size.y;
+```
+
+### render_text
+
+Render text with various alignment and style options.
+
+```cpp
+void render_text(int x, int y, unsigned int alignment, const font_flags flags, 
+                const char* string, LPD3DXFONT font, color color)
+```
+
+```cpp
+g_render.render_text(
+    100, 100,
+    AL_HORIZONTAL_CENTER | AL_VERTICAL_CENTER,
+    FLAG_OUTLINE,
+    "Centered Text",
+    g_fonts[HASH("Verdana")],
+    color::white()
+);
+```
+
+#### Font Flags
+
+<ParamField path="FLAG_NONE" type="font_flags">
+  No special rendering flags
+</ParamField>
+
+<ParamField path="FLAG_DROPSHADOW" type="font_flags">
+  Draw text with drop shadow
+</ParamField>
+
+<ParamField path="FLAG_OUTLINE" type="font_flags">
+  Draw text with full outline
+</ParamField>
+
+<ParamField path="FLAG_OUTLINE_SEMI" type="font_flags">
+  Draw text with semi-transparent outline
+</ParamField>
+
+#### Font Alignment
+
+<ParamField path="AL_DEFAULT" type="font_alignment">
+  Default alignment (top-left)
+</ParamField>
+
+<ParamField path="AL_VERTICAL_TOP" type="font_alignment">
+  Align to top edge
+</ParamField>
+
+<ParamField path="AL_VERTICAL_CENTER" type="font_alignment">
+  Vertically center text
+</ParamField>
+
+<ParamField path="AL_HORIZONTAL_LEFT" type="font_alignment">
+  Align to left edge
+</ParamField>
+
+<ParamField path="AL_HORIZONTAL_CENTER" type="font_alignment">
+  Horizontally center text
+</ParamField>
+
+## Advanced Drawing
+
+### quadratic_curve
+
+Draw a smooth quadratic Bézier curve.
+
+```cpp
+template<class T>
+void quadratic_curve(const math::vec2<T>& start, const math::vec2<T>& control, 
+                    const math::vec2<T>& end, color color)
+```
+
+```cpp
+math::vec2<int> start(100, 100);
+math::vec2<int> control(200, 50);
+math::vec2<int> end(300, 100);
+
+g_render.quadratic_curve(start, control, end, color::cyan());
+```
+
+<ParamField path="start" type="math::vec2<T>">
+  Starting point of the curve
+</ParamField>
+
+<ParamField path="control" type="math::vec2<T>">
+  Control point that defines curve shape
+</ParamField>
+
+<ParamField path="end" type="math::vec2<T>">
+  Ending point of the curve
+</ParamField>
+
+## Viewport Management
+
+### get_viewport
+
+Get the current viewport settings.
+
+```cpp
+D3DVIEWPORT9 get_viewport()
+```
+
+```cpp
+auto viewport = g_render.get_viewport();
+int screenWidth = viewport.Width;
+int screenHeight = viewport.Height;
+```
+
+### set_viewport
+
+Set a custom viewport for clipping rendering.
+
+```cpp
+bool set_viewport(const math::vec2<int>& pos, const math::vec2<int>& size)
+bool set_viewport(D3DVIEWPORT9 vp)
+```
+
+```cpp
+// Save current viewport
+auto originalVp = g_render.get_viewport();
+
+// Set custom viewport for UI region
+g_render.set_viewport(math::vec2<int>(0, 0), math::vec2<int>(800, 600));
+
+// Render UI elements...
+
+// Restore original viewport
+g_render.set_viewport(originalVp);
+```
+
+## Font Management
+
+The `g_fonts` manager handles font creation and retrieval.
+
+### create_font
+
+Create a new font for rendering.
+
+```cpp
+void create_font(std::uint32_t hash, std::size_t size, std::size_t weight, 
+                bool anti_aliased, const char* font_name)
+```
+
+```cpp
+g_fonts.create_font(HASH("Verdana"), 14, FW_NORMAL, true, "Verdana");
+g_fonts.create_font(HASH("TahomaBold"), 16, FW_BOLD, true, "Tahoma");
+```
+
+<ParamField path="hash" type="std::uint32_t">
+  Unique identifier for the font (use HASH macro)
+</ParamField>
+
+<ParamField path="size" type="std::size_t">
+  Font size in pixels
+</ParamField>
+
+<ParamField path="weight" type="std::size_t">
+  Font weight (FW_NORMAL, FW_BOLD, etc.)
+</ParamField>
+
+<ParamField path="anti_aliased" type="bool">
+  Enable anti-aliasing for smoother text
+</ParamField>
+
+### Accessing Fonts
+
+```cpp
+LPD3DXFONT font = g_fonts[HASH("Verdana")];
+if (font) {
+    g_render.render_text(100, 100, AL_DEFAULT, FLAG_NONE, 
+                        "Text", font, color::white());
+}
+```
+
+## Vertex Structure
+
+Low-level vertex data for custom rendering.
+
+```cpp
+vertex v1(100.0f, 100.0f, color::white());
+vertex v2(100, 100, 200, 200, color::red()); // with texture coordinates
+```
+
+## Common Patterns
+
+### ESP Box
+
+```cpp
+void draw_esp_box(const math::vec3& origin, const math::vec3& mins, const math::vec3& maxs) {
+    math::vec3 corners[8];
+    // Calculate 8 corners of bounding box
+    // ...
+    
+    math::vec3 screen[8];
+    for (int i = 0; i < 8; i++) {
+        if (!math::world_to_screen(corners[i], screen[i]))
+            return;
+    }
+    
+    // Find 2D bounding box
+    int left = screen[0].x, top = screen[0].y;
+    int right = screen[0].x, bottom = screen[0].y;
+    
+    for (int i = 1; i < 8; i++) {
+        left = std::min(left, (int)screen[i].x);
+        right = std::max(right, (int)screen[i].x);
+        top = std::min(top, (int)screen[i].y);
+        bottom = std::max(bottom, (int)screen[i].y);
+    }
+    
+    g_render.render_rectangle(left, top, right - left, bottom - top, color::green());
+}
+```
+
+### Health Bar
+
+```cpp
+void draw_health_bar(int x, int y, int width, int height, int health, int maxHealth) {
+    float ratio = (float)health / (float)maxHealth;
+    int healthWidth = (int)(width * ratio);
+    
+    // Background
+    g_render.render_filled_rectangle(x, y, width, height, color(0, 0, 0, 150));
+    
+    // Health bar with gradient
+    color healthColor = health > 50 ? color::green() : color::red();
+    g_render.render_gradient<gradient_type_t::HORIZONTAL>(
+        x, y, healthWidth, height,
+        healthColor, color(healthColor.r / 2, healthColor.g / 2, healthColor.b / 2)
+    );
+    
+    // Border
+    g_render.render_rectangle(x, y, width, height, color::white());
+}
+```
+
+### Crosshair
+
+```cpp
+void draw_crosshair(int centerX, int centerY, int size, int gap) {
+    // Horizontal line
+    g_render.render_line(centerX - size - gap, centerY, centerX - gap, centerY, color::white());
+    g_render.render_line(centerX + gap, centerY, centerX + size + gap, centerY, color::white());
+    
+    // Vertical line
+    g_render.render_line(centerX, centerY - size - gap, centerX, centerY - gap, color::white());
+    g_render.render_line(centerX, centerY + gap, centerX, centerY + size + gap, color::white());
+    
+    // Center dot
+    g_render.render_circle(centerX, centerY, 2, 16, color::red());
+}
+```
+
+### Text with Background
+
+```cpp
+void draw_text_with_bg(int x, int y, const char* text, LPD3DXFONT font) {
+    auto size = g_render.render_text_size(text, font);
+    
+    // Background with padding
+    g_render.render_filled_rectangle(
+        x - 4, y - 2, 
+        size.x + 8, size.y + 4, 
+        color(0, 0, 0, 180)
+    );
+    
+    // Text
+    g_render.render_text(
+        x, y, AL_DEFAULT, FLAG_NONE, 
+        text, font, color::white()
+    );
+}
+```

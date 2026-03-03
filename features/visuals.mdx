@@ -1,0 +1,291 @@
+---
+title: "Visuals"
+description: "ESP rendering system with boxes, skeletons, and player information"
+---
+
+The HotWheels SDK visuals system provides a comprehensive ESP (Extra Sensory Perception) implementation with object-oriented design.
+
+## Overview
+
+The visuals module (`hacks/features/visuals/`) implements a flexible ESP system:
+
+- 3D bounding box calculation
+- Player information overlays (name, health, weapon)
+- Skeleton rendering
+- Backtrack visualization
+- Dormant player alpha modulation
+
+## Architecture
+
+The ESP system uses an object-oriented design with reusable components:
+
+```cpp
+struct esp_object {
+    sdk::c_cs_player* m_owner{ };
+    esp_box m_box{ };
+};
+
+struct impl {
+    std::array< esp_object, 65 > esp_objects{ };
+    void update( );
+    void render( );
+};
+```
+
+**Source**: `hacks/features/visuals/visuals.h:86-104`
+
+<Note>
+The visuals system supports up to 65 players (indices 0-64), covering all possible player slots in CS:GO.
+</Note>
+
+## Bounding Box Calculation
+
+The ESP calculates 2D screen-space bounding boxes from 3D world coordinates:
+
+<Steps>
+  <Step title="Get Player Bounds">
+    Retrieve the player's mins/maxs vectors from collision bounds
+  </Step>
+  
+  <Step title="Generate 8 Corner Points">
+    Create all 8 corners of the 3D bounding box
+  </Step>
+  
+  <Step title="Transform to World Space">
+    Apply the player's transformation matrix to get world positions
+  </Step>
+  
+  <Step title="Project to Screen">
+    Convert 3D world positions to 2D screen coordinates
+  </Step>
+  
+  <Step title="Find Screen Bounds">
+    Calculate the min/max X and Y to create a 2D box
+  </Step>
+</Steps>
+
+### Implementation
+
+```cpp
+math::box visuals::esp_box::calculate_box( sdk::c_cs_player* player, bool& on_screen )
+{
+    auto& player_info = g_entity_list.players[ player->entity_index( ) ];
+
+    math::vec3 mins = player_info.m_mins;
+    math::vec3 maxs = player_info.m_maxs;
+    math::matrix_3x4 transform = player_info.m_rgfl;
+
+    math::vec3 points[] = { 
+        math::vec3( mins.x, mins.y, mins.z ), 
+        math::vec3( mins.x, maxs.y, mins.z ), 
+        math::vec3( maxs.x, maxs.y, mins.z ),
+        math::vec3( maxs.x, mins.y, mins.z ), 
+        math::vec3( maxs.x, maxs.y, maxs.z ), 
+        math::vec3( mins.x, maxs.y, maxs.z ),
+        math::vec3( mins.x, mins.y, maxs.z ), 
+        math::vec3( maxs.x, mins.y, maxs.z ) 
+    };
+
+    math::vec3 translated_points[ 8 ];
+    for ( int iterator = 0; iterator < 8; iterator++ )
+        translated_points[ iterator ] = math::vector_transform( points[ iterator ], transform );
+
+    // World to screen conversion and bounds calculation...
+}
+```
+
+**Source**: `hacks/features/visuals/visuals.cpp:6-55`
+
+<Warning>
+Box calculations use the RGFL matrix which must be updated during the paint phase due to CS:GO's multicore rendering. Always update transforms before rendering.
+</Warning>
+
+## ESP Components
+
+The visuals system supports multiple overlay types:
+
+### Text Overlays
+
+```cpp
+struct esp_text {
+    std::string m_text{ };
+    color m_color{ };
+    esp_location m_location{ };
+    LPD3DXFONT m_font{ };
+    font_flags m_flags{ };
+};
+```
+
+**Locations**: `LOCATION_TOP`, `LOCATION_LEFT`, `LOCATION_BOTTOM`, `LOCATION_RIGHT`
+
+### Health Bars
+
+```cpp
+health_bar.m_location   = esp_location::LOCATION_LEFT;
+health_bar.m_width      = 2;
+health_bar.m_color_from = color( 0, 255, 0, 255 * dormant_alpha_modulation );
+health_bar.m_color_to   = color( 255, 0, 0, 255 * dormant_alpha_modulation );
+health_bar.m_min        = 0;
+health_bar.m_max        = 100;
+health_bar.m_cur        = object.m_owner->health( );
+```
+
+**Source**: `hacks/features/visuals/visuals.cpp:99-107`
+
+The health bar uses color interpolation from green (full health) to red (low health).
+
+### Weapon Information
+
+```cpp
+auto player_weapon = g_interfaces.entity_list->get_client_entity_from_handle< sdk::c_base_combat_weapon* >( 
+    object.m_owner->active_weapon( ) 
+);
+
+if ( player_weapon && player_weapon->definition_index( ) ) {
+    auto weapon_info = player_weapon->get_weapon_data( );
+    
+    // Display weapon name and ammo bar
+    weapon_ammo_bar.m_max = weapon_info->max_clip1;
+    weapon_ammo_bar.m_cur = player_weapon->clip_mag( );
+}
+```
+
+**Source**: `hacks/features/visuals/visuals.cpp:117-144`
+
+## Skeleton Rendering
+
+The ESP can render player skeletons by connecting bone positions:
+
+```cpp
+if ( m_skeleton ) {
+    if ( auto studio = g_interfaces.model_info->get_studio_model( owner->get_model( ) ) ) {
+        for ( int bone_index = 0; bone_index < studio->bones; bone_index++ ) {
+            auto bone = studio->get_bone( bone_index );
+
+            if ( !bone || !( bone->flags & 0x100 ) || bone->parent == -1 )
+                continue;
+
+            auto parent_bone_index = bone->parent;
+            math::vec2< int > parent_bone_screen{ }, bone_screen{ };
+
+            parent_bone_screen = utils::world_to_screen( owner->get_bone_position( parent_bone_index ) );
+            bone_screen = utils::world_to_screen( owner->get_bone_position( bone_index ) );
+
+            g_render.render_line( parent_bone_screen.x, parent_bone_screen.y, 
+                                  bone_screen.x, bone_screen.y, { 255, 255, 255 } );
+        }
+    }
+}
+```
+
+**Source**: `hacks/features/visuals/visuals.cpp:201-225`
+
+<Note>
+Bone flag `0x100` indicates hitbox bones. The skeleton only renders bones that are part of the hitbox system.
+</Note>
+
+## Backtrack Visualization
+
+The ESP integrates with lag compensation to show backtracked positions:
+
+```cpp
+if ( m_backtrack ) {
+    if ( g_lagcomp.heap_records[ owner->entity_index( ) ] ) {
+        static auto unlag_pointer = g_convars[ _("sv_maxunlag") ];
+        auto sv_maxunlag_ticks = sdk::time_to_ticks( sv_maxunlag->get_float( ) );
+
+        // Find oldest valid record
+        for ( int current_heap_iterator = 0; current_heap_iterator < sv_maxunlag_ticks; current_heap_iterator++ ) {
+            lagcomp::record* current_record = &g_lagcomp.heap_records[ owner->entity_index( ) ][ current_heap_iterator ];
+            // Render skeleton at backtracked position
+        }
+    }
+}
+```
+
+**Source**: `hacks/features/visuals/visuals.cpp:227-271`
+
+## Dormant Player Handling
+
+Players that become dormant (out of view) fade out smoothly:
+
+```cpp
+auto& dormant_info = g_entity_list.players[ object.m_owner->entity_index( ) ].m_dormant_info;
+auto dormant_time = sdk::ticks_to_time( g_interfaces.globals->tick_count - dormant_info.m_found_tick );
+
+if ( dormant_time < 2.5f )
+    dormant_time = 0.f;
+
+auto dormant_alpha_modulation = dormant_info.m_valid ? -( ( dormant_time - 2.5f ) / .5f ) + 1.f : 1.f;
+```
+
+**Source**: `hacks/features/visuals/visuals.cpp:62-68`
+
+Dormant players fade over 0.5 seconds after being out of view for 2.5 seconds.
+
+## Rendering Pipeline
+
+<CodeGroup>
+```cpp Update Phase
+void visuals::impl::update( )
+{
+    for ( auto& player_info : g_entity_list.players ) {
+        auto player = g_interfaces.entity_list->get_client_entity< sdk::c_cs_player* >( player_info.m_index );
+
+        if ( ( !player_info.m_valid && !player_info.m_dormant_info.m_valid ) || !player )
+            continue;
+
+        esp_object& buffer_object = esp_objects[ player->entity_index( ) ];
+        buffer_object.m_owner = player;
+
+        if ( true )
+            update_object( buffer_object );
+    }
+}
+```
+
+```cpp Render Phase
+void visuals::impl::render( )
+{
+    update( );
+
+    for ( auto& player_info : g_entity_list.players ) {
+        auto player = g_interfaces.entity_list->get_client_entity< sdk::c_cs_player* >( player_info.m_index );
+
+        if ( ( !player_info.m_valid && !player_info.m_dormant_info.m_valid ) || !player )
+            continue;
+
+        esp_object& object = esp_objects[ player->entity_index( ) ];
+        object.m_box.render( player );
+    }
+}
+```
+</CodeGroup>
+
+**Source**: `hacks/features/visuals/visuals.cpp:147-178`
+
+## API Reference
+
+### `esp_box::render(owner)`
+
+Renders the complete ESP for a player.
+
+**Parameters**:
+- `owner` - The player entity to render ESP for
+
+### `esp_box::calculate_box(player, on_screen)`
+
+Calculates 2D bounding box from 3D player model.
+
+**Parameters**:
+- `player` - Target player entity
+- `on_screen` - Output parameter indicating if player is visible
+
+**Returns**: `math::box` - 2D screen-space bounding box
+
+### ESP Locations
+
+- `LOCATION_TOP` - Above the bounding box
+- `LOCATION_LEFT` - Left side of the box
+- `LOCATION_BOTTOM` - Below the bounding box
+- `LOCATION_RIGHT` - Right side of the box

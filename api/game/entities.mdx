@@ -1,0 +1,263 @@
+---
+title: "Entities"
+description: "Entity classes including c_base_entity, c_base_animating, and c_base_combat_character"
+---
+
+## c_base_entity
+
+Base entity class that all game entities inherit from. Provides fundamental entity properties and methods.
+
+**Source:** `game/sdk/classes/c_base_entity.h:17`
+
+**Inherits:** `i_client_entity`
+
+### Network Variables
+
+<ParamField path="model_index" type="std::int32_t">
+  Model index for the entity's visual representation
+  
+  **Netvar:** `CBaseEntity::m_nModelIndex`
+</ParamField>
+
+<ParamField path="team_number" type="sdk::teams">
+  Team number the entity belongs to (Terrorist, Counter-Terrorist, etc.)
+  
+  **Netvar:** `CBaseEntity::m_iTeamNum`
+</ParamField>
+
+<ParamField path="vector_origin" type="math::vec3">
+  World position of the entity
+  
+  **Netvar:** `CBaseEntity::m_vecOrigin`
+</ParamField>
+
+<ParamField path="vector_angles" type="math::vec3">
+  Rotation angles of the entity (pitch, yaw, roll)
+  
+  **Netvar:** `CBaseEntity::m_vecAngles`
+</ParamField>
+
+<ParamField path="owner_entity" type="std::uintptr_t">
+  Handle to the entity's owner
+  
+  **Netvar:** `CBaseEntity::m_hOwnerEntity`
+</ParamField>
+
+<ParamField path="spotted" type="bool">
+  Whether the entity has been spotted by the local player
+  
+  **Netvar:** `CBaseEntity::m_bSpotted`
+</ParamField>
+
+<ParamField path="simulation_time" type="float">
+  Server simulation time for the entity
+  
+  **Netvar:** `CBaseEntity::m_flSimulationTime`
+</ParamField>
+
+<ParamField path="effects" type="sdk::bit_flag_t<std::int32_t>">
+  Entity effects bit flags
+  
+  **Netvar:** `CBaseEntity::m_fEffects`
+</ParamField>
+
+### Methods
+
+<ResponseField name="rgfl_coordinate_frame" type="math::matrix_3x4&">
+  Returns the entity's coordinate frame transformation matrix
+  
+  **Returns:** Reference to the 3x4 transformation matrix
+  
+  ```cpp
+  auto& matrix = entity->rgfl_coordinate_frame();
+  ```
+</ResponseField>
+
+<ResponseField name="is_player" type="bool">
+  Checks if the entity is a player
+  
+  **Returns:** `true` if entity is a player, `false` otherwise
+  
+  **Virtual Index:** 158
+  
+  ```cpp
+  if (entity->is_player()) {
+      // Handle player-specific logic
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="data_description_map" type="data_map*">
+  Retrieves the entity's data description map for data-driven properties
+  
+  **Returns:** Pointer to the data map
+  
+  **Virtual Index:** 15
+</ResponseField>
+
+<ResponseField name="prediction_description_map" type="data_map*">
+  Retrieves the entity's prediction data map
+  
+  **Returns:** Pointer to the prediction data map
+  
+  **Virtual Index:** 17
+</ResponseField>
+
+<ResponseField name="get_var_map" type="var_mapping*">
+  Gets the entity's variable mapping structure
+  
+  **Returns:** Pointer to variable mapping at offset 0x24
+</ResponseField>
+
+---
+
+## c_base_animating
+
+Animated entity class that extends base entity with animation capabilities.
+
+**Source:** `game/sdk/classes/c_base_animating.h:10`
+
+**Inherits:** `c_base_entity`
+
+### Network Variables
+
+<ParamField path="hitbox_set" type="std::int32_t">
+  Index of the active hitbox set
+  
+  **Netvar:** `CBaseAnimating::m_nHitboxSet`
+</ParamField>
+
+<ParamField path="cycle" type="float">
+  Animation cycle progress (0.0 to 1.0)
+  
+  **Netvar:** `CBaseAnimating::m_flCycle`
+</ParamField>
+
+### Methods
+
+<ResponseField name="pose_parameter" type="std::array<float, 24>&">
+  Returns the array of pose parameters for animation blending
+  
+  **Returns:** Reference to array of 24 pose parameter values
+  
+  ```cpp
+  auto& poses = entity->pose_parameter();
+  poses[0] = 0.5f; // Modify first pose parameter
+  ```
+</ResponseField>
+
+<ResponseField name="is_jiggle_bones_enabled" type="bool&">
+  Gets reference to the jiggle bones enabled flag
+  
+  **Returns:** Reference to boolean at offset 0x2930
+  
+  ```cpp
+  entity->is_jiggle_bones_enabled() = false;
+  ```
+</ResponseField>
+
+<ResponseField name="invalidate_bone_cache" type="void">
+  Invalidates the entity's bone cache, forcing recalculation on next access
+  
+  ```cpp
+  entity->invalidate_bone_cache();
+  ```
+</ResponseField>
+
+<ResponseField name="hitbox_position" type="math::vec3">
+  Calculates the world position of a hitbox
+  
+  **Parameters:**
+  - `index` - Hitbox index
+  - `point_scale` - Scale factor for point position (default: 0.5)
+  
+  **Returns:** World position vector
+  
+  ```cpp
+  math::vec3 head_pos = player->hitbox_position(sdk::hitgroup::HITGROUP_HEAD);
+  ```
+  
+  <Expandable title="Overload with matrix">
+    **Parameters:**
+    - `index` - Hitbox index
+    - `matrix` - Bone transformation matrix
+    - `point_scale` - Scale factor (default: 0.5)
+    
+    ```cpp
+    math::vec3 pos = player->hitbox_position(0, bone_matrix, 0.5f);
+    ```
+  </Expandable>
+</ResponseField>
+
+---
+
+## c_base_combat_character
+
+Combat character class that adds weapon handling capabilities.
+
+**Source:** `game/sdk/classes/c_base_combat_character.h:14`
+
+**Inherits:** `c_base_animating`
+
+### Network Variables
+
+<ParamField path="active_weapon" type="std::uintptr_t">
+  Handle to the currently active weapon
+  
+  **Netvar:** `CBaseCombatCharacter::m_hActiveWeapon`
+  
+  ```cpp
+  auto weapon_handle = character->active_weapon();
+  auto weapon = g_interfaces.entity_list->get_client_entity_from_handle<c_base_combat_weapon*>(weapon_handle);
+  ```
+</ParamField>
+
+<ParamField path="next_attack" type="float">
+  Time when the character can perform the next attack
+  
+  **Netvar:** `CBaseCombatCharacter::m_hActiveWeapon`
+</ParamField>
+
+<ParamField path="my_weapons" type="std::uintptr_t">
+  Array handle to all weapons owned by this character
+  
+  **Netvar:** `CBaseCombatCharacter::m_hMyWeapons`
+</ParamField>
+
+<ParamField path="my_wearables" type="std::uintptr_t">
+  Array handle to wearable items (gloves, etc.)
+  
+  **Netvar:** `CBaseCombatCharacter::m_hMyWearables`
+</ParamField>
+
+### Usage Example
+
+```cpp
+// Access active weapon
+auto character = entity->as<c_base_combat_character*>();
+auto weapon_handle = character->active_weapon();
+
+if (weapon_handle) {
+    auto weapon = g_interfaces.entity_list->get_client_entity_from_handle<c_base_combat_weapon*>(weapon_handle);
+    if (weapon) {
+        float next_shot = weapon->next_primary_attack();
+    }
+}
+```
+
+---
+
+## Inheritance Hierarchy
+
+```
+i_client_entity
+    └── c_base_entity
+            └── c_base_animating
+                    └── c_base_combat_character
+                            └── c_base_player
+                                    └── c_cs_player
+```
+
+<Note>
+  All entity classes use the `NETVAR` macro to define networked variables that are synchronized between client and server. The netvar system uses the table and property names from the Source Engine's network property tables.
+</Note>

@@ -1,0 +1,273 @@
+---
+title: "Installation"
+description: "Set up your development environment and build the HotWheels SDK"
+---
+
+# Installation Guide
+
+This guide will walk you through setting up your development environment and building the HotWheels SDK DLL.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Visual Studio" icon="code">
+    Visual Studio 2019 or 2022 with C++ development tools
+  </Card>
+  <Card title="DirectX SDK" icon="cube">
+    DirectX SDK (June 2010) for D3D9 development
+  </Card>
+  <Card title="Windows 10/11" icon="windows">
+    Windows 10 or 11 (x64) operating system
+  </Card>
+  <Card title="CS:GO" icon="gamepad">
+    Counter-Strike: Global Offensive installed
+  </Card>
+</CardGroup>
+
+## Step 1: Install Visual Studio
+
+<Steps>
+  <Step title="Download Visual Studio">
+    Download [Visual Studio 2022 Community](https://visualstudio.microsoft.com/downloads/) (free) or Visual Studio 2019.
+  </Step>
+  
+  <Step title="Select Workloads">
+    During installation, select the **Desktop development with C++** workload.
+    
+    Required components:
+    - MSVC v142 (VS 2019) or v143 (VS 2022) build tools
+    - Windows 10 SDK (10.0.19041.0 or later)
+    - C++ profiling tools
+    - C++ CMake tools (optional)
+  </Step>
+  
+  <Step title="Install Platform Toolset">
+    The project uses **v143 (Visual Studio 2022)** toolset by default. If using VS 2019, update the `.vcxproj` file:
+    
+    ```xml
+    <PlatformToolset>v142</PlatformToolset>
+    ```
+  </Step>
+</Steps>
+
+## Step 2: Install DirectX SDK
+
+<Warning>
+The DirectX SDK (June 2010) is required for Direct3D 9 development. Newer Windows SDKs don't include D3DX9.
+</Warning>
+
+<Steps>
+  <Step title="Download DirectX SDK">
+    Download the [DirectX SDK (June 2010)](https://www.microsoft.com/en-us/download/details.aspx?id=6812) from Microsoft.
+  </Step>
+  
+  <Step title="Install SDK">
+    Run the installer and note the installation path (usually `C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)`).
+  </Step>
+  
+  <Step title="Fix S1023 Error (if occurs)">
+    If you get error S1023 during installation:
+    
+    1. Uninstall "Microsoft Visual C++ 2010 Redistributable" (both x86 and x64)
+    2. Install DirectX SDK
+    3. Reinstall the redistributables
+  </Step>
+  
+  <Step title="Verify Environment Variable">
+    The SDK should set the `DXSDK_DIR` environment variable automatically. Verify:
+    
+    ```powershell
+    echo $env:DXSDK_DIR
+    # Should output: C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\
+    ```
+  </Step>
+</Steps>
+
+## Step 3: Clone the Repository
+
+```bash
+git clone <repository-url>
+cd hw-sdk
+```
+
+## Step 4: Project Configuration
+
+The project is pre-configured with the following settings:
+
+<Tabs>
+  <Tab title="Debug Configuration">
+    ```xml
+    Platform: Win32 (x86)
+    Configuration: Debug
+    Output: ./debug/zipudhe2.dll
+    Runtime Library: Multi-threaded Debug (/MTd)
+    C++ Standard: C++20
+    Character Set: MultiByte
+    Preprocessor: WIN32, _WINDOWS, NOMINMAX, CONSOLE_ENABLED
+    ```
+    
+    <Note>
+    Debug builds include console output for logging via `console::print()`. The DLL is named `zipudhe2.dll`.
+    </Note>
+  </Tab>
+  
+  <Tab title="Release Configuration">
+    ```xml
+    Platform: Win32 (x86)
+    Configuration: Release
+    Output: ./release/chungy.dll
+    Runtime Library: Multi-threaded (/MT)
+    C++ Standard: C++20
+    Optimizations: Whole Program Optimization enabled
+    ```
+    
+    <Warning>
+    Release builds do NOT include console output and are optimized for performance.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Include Paths
+
+The project automatically includes:
+
+```xml
+$(DXSDK_DIR)Include
+$(SolutionDir)hw-sdk\dependencies\freetype\include
+```
+
+### Library Paths
+
+```xml
+$(DXSDK_DIR)Lib\x86
+$(SolutionDir)hw-sdk\dependencies\freetype\lib
+```
+
+### Linked Libraries
+
+- `freetype.lib` - Font rendering for ImGui
+- Standard Windows libraries (automatically linked)
+
+## Step 5: Build the Project
+
+<Steps>
+  <Step title="Open Solution">
+    Open `hw-sdk.vcxproj` or the `.sln` file in Visual Studio.
+  </Step>
+  
+  <Step title="Select Configuration">
+    Choose your build configuration:
+    - **Debug | Win32** - For development with console logging
+    - **Release | Win32** - For production use
+    
+    <Note>
+    Always use **Win32** (x86) platform, not x64. CS:GO is a 32-bit application.
+    </Note>
+  </Step>
+  
+  <Step title="Build Solution">
+    Build the project:
+    - Press `Ctrl+Shift+B`, or
+    - Menu: `Build → Build Solution`, or
+    - Right-click project → `Build`
+  </Step>
+  
+  <Step title="Verify Output">
+    Check for the compiled DLL:
+    
+    <CodeGroup>
+    ```bash Debug Build
+    ./debug/zipudhe2.dll
+    ./debug/intermediate/  # Object files
+    ```
+    
+    ```bash Release Build
+    ./release/chungy.dll
+    ./release/intermediate/  # Object files
+    ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: DXSDK_DIR not found" icon="triangle-exclamation">
+    **Problem**: Build fails with "Cannot find DirectX SDK include path"
+    
+    **Solution**:
+    1. Verify DirectX SDK is installed
+    2. Check environment variable: `echo $env:DXSDK_DIR` in PowerShell
+    3. Restart Visual Studio to load new environment variables
+    4. Manually set include/library paths in project properties
+  </Accordion>
+  
+  <Accordion title="Error: Cannot open freetype.lib" icon="triangle-exclamation">
+    **Problem**: Linker error about missing `freetype.lib`
+    
+    **Solution**:
+    1. Verify FreeType library exists at `dependencies/freetype/lib/freetype.lib`
+    2. Check that library is for x86 architecture (not x64)
+    3. Rebuild FreeType from source if necessary
+  </Accordion>
+  
+  <Accordion title="Error: C++ standard not supported" icon="triangle-exclamation">
+    **Problem**: Compiler errors about C++20 features
+    
+    **Solution**:
+    1. Update Visual Studio to latest version
+    2. Verify C++ Language Standard is set to `C++20` or `/std:c++20`
+    3. Check Platform Toolset is v142 or v143
+  </Accordion>
+  
+  <Accordion title="LNK2001: Unresolved external symbol" icon="triangle-exclamation">
+    **Problem**: Linker errors about missing functions
+    
+    **Solution**:
+    1. Ensure all `.cpp` files are included in the project
+    2. Check that Runtime Library setting is `/MT` (Release) or `/MTd` (Debug)
+    3. Clean and rebuild: `Build → Clean Solution`, then `Build → Rebuild Solution`
+  </Accordion>
+  
+  <Accordion title="Build succeeds but DLL is huge" icon="triangle-exclamation">
+    **Problem**: Debug DLL is very large (>50 MB)
+    
+    **Solution**:
+    This is normal for Debug builds with symbols. Use Release configuration for smaller output.
+    
+    Typical sizes:
+    - Debug: 30-80 MB (includes debug symbols)
+    - Release: 2-10 MB (optimized)
+  </Accordion>
+</AccordionGroup>
+
+## Build Output Structure
+
+After successful build:
+
+```
+hw-sdk/
+├── debug/
+│   ├── zipudhe2.dll          # Debug DLL
+│   └── intermediate/         # Debug object files
+├── release/
+│   ├── chungy.dll            # Release DLL
+│   └── intermediate/         # Release object files
+├── dependencies/             # Third-party libraries
+├── game/                     # CS:GO SDK headers
+├── globals/                  # Global state and interfaces
+├── hacks/                    # Feature implementations
+├── hooks/                    # Hook implementations
+├── utils/                    # Utilities
+└── hw-sdk.vcxproj           # Visual Studio project
+```
+
+## Next Steps
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Now that you've built the DLL, learn how to inject it into CS:GO and start using the SDK.
+</Card>
+
+<Note>
+**Build Time**: First build may take 2-5 minutes depending on your system. Incremental builds are much faster (10-30 seconds).
+</Note>

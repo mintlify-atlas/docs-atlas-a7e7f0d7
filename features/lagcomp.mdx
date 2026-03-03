@@ -1,0 +1,374 @@
+---
+title: "Lag Compensation"
+description: "Backtracking and lag compensation system for accurate hit registration"
+---
+
+The HotWheels SDK lag compensation system provides player position history tracking and backtracking for accurate hit detection.
+
+## Overview
+
+The lag compensation module (`hacks/features/lagcomp/`) implements:
+
+- Player position history recording
+- Backtrack validation
+- Lerp time calculation
+- Optimal record selection based on FOV
+- Integration with CS:GO's server-side lag compensation
+
+## Record Structure
+
+Each lag compensation record stores a snapshot of player state:
+
+```cpp
+class record
+{
+public:
+    record( ) = default;
+
+    bool valid = false;
+    float simulation_time = -1.f;
+
+    math::vec3 abs_origin = { };
+    math::vec3 eye_position = { };
+
+    sdk::c_cs_player* player = { };
+
+    math::matrix_3x4 bone_matrix[ 128 ] = { };
+};
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.h:8-22`
+
+<Note>
+Each record contains full skeleton data with 128 bone matrices for accurate hitbox positioning.
+</Note>
+
+## Architecture
+
+The system maintains circular buffers for each player:
+
+```cpp
+struct impl {
+private:
+    std::array< int, 65 > heap_iterator;
+    bool is_valid( record heap_record );
+
+public:
+    float lerp_time( );
+    std::array< record*, 65 > heap_records;
+
+    void update( );
+    void backtrack_player( record* heap_record );
+    void backtrack_player( sdk::c_cs_player* player );
+};
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.h:24-40`
+
+## Lerp Time Calculation
+
+Interpolation time is calculated from client ConVars:
+
+<Steps>
+  <Step title="Get Client Settings">
+    Read `cl_interp`, `cl_interp_ratio`, and `cl_updaterate` ConVars
+  </Step>
+  
+  <Step title="Clamp Interp Ratio">
+    Limit ratio between `sv_client_min_interp_ratio` and `sv_client_max_interp_ratio`
+  </Step>
+  
+  <Step title="Calculate Final Value">
+    Return maximum of `cl_interp` or `(interp_ratio / updaterate)`
+  </Step>
+</Steps>
+
+### Implementation
+
+```cpp
+float lagcomp::impl::lerp_time( )
+{
+    static sdk::con_var *cl_updaterate = g_convars[ _("cl_updaterate") ], 
+                        *cl_interp_ratio = g_convars[ _("cl_interp_ratio") ],
+                        *cl_interp = g_convars[ _("cl_interp") ], 
+                        *sv_client_min_interp_ratio = g_convars[ _("sv_client_min_interp_ratio") ],
+                        *sv_client_max_interp_ratio = g_convars[ _("sv_client_max_interp_ratio") ];
+
+    static auto interp_ratio = std::max( cl_interp_ratio->get_float( ), 1.f );
+
+    interp_ratio = std::clamp( interp_ratio, sv_client_min_interp_ratio->get_float( ), 
+                                              sv_client_max_interp_ratio->get_float( ) );
+
+    return std::max( cl_interp->get_float( ), interp_ratio / cl_updaterate->get_int( ) );
+}
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.cpp:33-44`
+
+<Warning>
+Lerp time affects how far back in time you can backtrack. Higher lerp values increase backtrack window.
+</Warning>
+
+## Record Validation
+
+Records are validated against network latency and max unlag time:
+
+```cpp
+bool lagcomp::impl::is_valid( record heap_record )
+{
+    // sanity check
+    auto m_nci = g_interfaces.engine->get_net_channel_info( );
+    if ( !m_nci )
+        return false;
+
+    float correct = 0.f;
+
+    static auto unlag_pointer = g_convars[ _("sv_maxunlag") ];
+    auto sv_maxunlag = unlag_pointer->get_float( );
+
+    correct += m_nci->get_latency( sdk::flow::FLOW_OUTGOING );
+    correct += lerp_time( );
+
+    correct = std::clamp( correct, 0.f, sv_maxunlag );
+
+    float delta_correct = std::fabsf( correct - ( g_interfaces.globals->current_time - heap_record.simulation_time ) );
+
+    return delta_correct <= .2f;
+}
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.cpp:11-31`
+
+### Validation Logic
+
+1. Calculate total compensation needed: `latency + lerp_time`
+2. Clamp to `sv_maxunlag` (default 0.4 seconds)
+3. Compare against record age
+4. Allow 0.2 second tolerance
+
+## Update System
+
+The system updates records every tick for all valid enemies:
+
+```cpp
+void lagcomp::impl::update( )
+{
+    static auto unlag_pointer = g_convars[ _("sv_maxunlag") ];
+    auto sv_maxunlag_ticks = sdk::time_to_ticks( unlag_pointer->get_float( ) );
+
+    for ( auto& player_info : g_entity_list.players ) {
+        auto player = g_interfaces.entity_list->get_client_entity< sdk::c_cs_player* >( player_info.m_index );
+
+        if ( !player_info.m_valid || !player || !player->is_enemy( g_ctx.local ) ) {
+            if ( heap_records[ player_info.m_index ] ) {
+                delete[] heap_records[ player_info.m_index ];
+                heap_records[ player_info.m_index ] = NULL;
+            }
+            continue;
+        }
+
+        auto& current_heap_iterator = heap_iterator[ player->entity_index( ) ];
+
+        if ( !heap_records[ player_info.m_index ] )
+            heap_records[ player_info.m_index ] = new record[ sv_maxunlag_ticks ];
+
+        auto& current_record = heap_records[ player_info.m_index ][ current_heap_iterator ];
+
+        current_record.abs_origin = player->get_abs_angles( );
+        current_record.eye_position = player->eye_position( );
+        current_record.simulation_time = player->simulation_time( );
+        current_record.valid = is_valid( current_record );
+        current_record.player = player;
+        player->setup_bones( current_record.bone_matrix, 128, 256, 0.f );
+
+        current_heap_iterator++;
+
+        if ( current_heap_iterator >= sv_maxunlag_ticks )
+            current_heap_iterator = 0;
+    }
+}
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.cpp:46-82`
+
+<Note>
+The system uses circular buffers that wrap around when reaching `sv_maxunlag_ticks`.
+</Note>
+
+## Backtracking Methods
+
+### Direct Record Backtrack
+
+Backtrack to a specific record:
+
+```cpp
+void lagcomp::impl::backtrack_player( record* heap_record )
+{
+    g_ctx.record = heap_record;
+
+    if ( !heap_record )
+        return;
+
+    g_ctx.cmd->tick_count = sdk::time_to_ticks( heap_record->simulation_time + lerp_time( ) );
+}
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.cpp:84-92`
+
+### FOV-Based Backtrack
+
+Automatically select the best record based on crosshair distance:
+
+```cpp
+void lagcomp::impl::backtrack_player( sdk::c_cs_player* player )
+{
+    static auto unlag_pointer = g_convars[ _("sv_maxunlag") ];
+    auto sv_maxunlag_ticks = sdk::time_to_ticks( unlag_pointer->get_float( ) );
+
+    auto entity_index = player->entity_index( );
+
+    auto closest_fov = FLT_MAX;
+    record* closest_record{ };
+
+    math::vec3 player_angles = g_interfaces.engine->get_view_angles( );
+
+    if ( !heap_records[ entity_index ] )
+        return;
+
+    for ( int current_heap_iterator = 0; current_heap_iterator < sv_maxunlag_ticks; current_heap_iterator++ ) {
+        auto current_record = &heap_records[ entity_index ][ current_heap_iterator ];
+
+        if ( !current_record )
+            continue;
+
+        auto record_fov = math::get_fov( player_angles, g_ctx.local->eye_position( ), 
+                                          current_record->eye_position );
+
+        if ( record_fov < closest_fov ) {
+            closest_fov = record_fov;
+            closest_record = current_record;
+        }
+    }
+
+    g_ctx.record = closest_record;
+
+    if ( !closest_record )
+        return;
+
+    g_ctx.cmd->tick_count = sdk::time_to_ticks( closest_record->simulation_time + lerp_time( ) );
+}
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.cpp:94-132`
+
+<Steps>
+  <Step title="Initialize Search">
+    Set closest FOV to maximum float value
+  </Step>
+  
+  <Step title="Iterate Records">
+    Loop through all available records for the player
+  </Step>
+  
+  <Step title="Calculate FOV">
+    Compare view angles to each record's eye position
+  </Step>
+  
+  <Step title="Select Best">
+    Choose record with smallest angular distance
+  </Step>
+  
+  <Step title="Apply Backtrack">
+    Set command tick count to compensated time
+  </Step>
+</Steps>
+
+## Tick Count Compensation
+
+The backtrack system modifies the user command's tick count:
+
+```cpp
+g_ctx.cmd->tick_count = sdk::time_to_ticks( closest_record->simulation_time + lerp_time( ) );
+```
+
+This tells the server to validate the shot at a previous point in time, accounting for:
+- Network latency
+- Client interpolation
+- Server lag compensation window
+
+## Integration Example
+
+Using lag compensation in the aimbot:
+
+```cpp
+// From aimbot.cpp
+g_lagcomp.backtrack_player( entity );
+
+math::vec3 forward_to_head = g_ctx.local->eye_position( ) - 
+                              entity->hitbox_position( sdk::HITGROUP_HEAD );
+
+if ( g_ctx.record ) {
+    forward_to_head = g_ctx.local->eye_position( ) - 
+                      entity->hitbox_position( sdk::HITGROUP_HEAD, g_ctx.record->bone_matrix );
+    math::vector_angles( forward_to_head, angles_to_head );
+}
+```
+
+## Memory Management
+
+Records are dynamically allocated per player:
+
+```cpp
+if ( !heap_records[ player_info.m_index ] )
+    heap_records[ player_info.m_index ] = new record[ sv_maxunlag_ticks ];
+```
+
+And freed when players become invalid:
+
+```cpp
+if ( heap_records[ player_info.m_index ] ) {
+    delete[] heap_records[ player_info.m_index ];
+    heap_records[ player_info.m_index ] = NULL;
+}
+```
+
+**Source**: `hacks/features/lagcomp/lagcomp.cpp:55-58`
+
+<Warning>
+Memory is allocated based on `sv_maxunlag`. Changes to this ConVar require reallocation.
+</Warning>
+
+## API Reference
+
+### `update()`
+
+Updates lag compensation records for all players. Call every tick.
+
+### `backtrack_player(record*)`
+
+Backtrack to a specific record.
+
+**Parameters**:
+- `heap_record` - Record to backtrack to
+
+### `backtrack_player(player*)`
+
+Automatically select and backtrack to the best record for a player.
+
+**Parameters**:
+- `player` - Target player entity
+
+### `lerp_time()`
+
+Calculates client interpolation time.
+
+**Returns**: `float` - Lerp time in seconds
+
+### `is_valid(record)`
+
+Validates a record against network conditions.
+
+**Parameters**:
+- `heap_record` - Record to validate
+
+**Returns**: `bool` - Whether the record is within valid backtrack range

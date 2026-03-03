@@ -1,0 +1,518 @@
+---
+title: "Renderer"
+description: "DirectX 9 rendering API for drawing shapes, text, and UI elements in-game"
+---
+
+# Renderer
+
+The renderer provides a high-level DirectX 9 rendering interface for drawing shapes, text, gradients, and other visual elements in CS:GO.
+
+## Initialization
+
+### init
+
+```cpp
+void g_render.init(IDirect3DDevice9* buffer_device);
+```
+
+Initializes the renderer with a DirectX device.
+
+<ParamField path="buffer_device" type="IDirect3DDevice9*">
+  DirectX 9 device to use for rendering
+</ParamField>
+
+<Note>
+  Call this once during SDK initialization, typically in the EndScene hook.
+</Note>
+
+---
+
+## State Management
+
+### setup_state / finish_state
+
+```cpp
+void g_render.setup_state();
+void g_render.finish_state();
+```
+
+Manages DirectX render state for custom drawing.
+
+<CodeGroup>
+```cpp Render Loop Pattern
+void on_frame() {
+    g_render.setup_state();
+    
+    // Your rendering code here
+    g_render.render_text(10, 10, AL_DEFAULT, FLAG_OUTLINE, "Hello", font, color::white());
+    
+    g_render.finish_state();
+}
+```
+</CodeGroup>
+
+---
+
+## Font Management
+
+### create_font
+
+```cpp
+void g_fonts.create_font(
+    std::uint32_t hash,
+    std::size_t size,
+    std::size_t weight,
+    bool anti_aliased,
+    const char* font_name
+);
+```
+
+Creates a font for text rendering.
+
+<ParamField path="hash" type="std::uint32_t">
+  Unique hash identifier for this font (use FNV1A hash)
+</ParamField>
+
+<ParamField path="size" type="std::size_t">
+  Font size in pixels
+</ParamField>
+
+<ParamField path="weight" type="std::size_t">
+  Font weight (e.g., FW_NORMAL, FW_BOLD)
+</ParamField>
+
+<ParamField path="anti_aliased" type="bool">
+  Enable anti-aliasing for smoother text
+</ParamField>
+
+<ParamField path="font_name" type="const char*">
+  System font name (e.g., "Verdana", "Arial")
+</ParamField>
+
+---
+
+### find
+
+```cpp
+LPD3DXFONT g_fonts.find(std::uint32_t hashed);
+LPD3DXFONT g_fonts[std::uint32_t hash]; // Operator overload
+```
+
+Retrieves a font by its hash identifier.
+
+<ParamField path="hashed" type="std::uint32_t">
+  Hash of the font to retrieve
+</ParamField>
+
+**Returns:** DirectX font object or `nullptr` if not found
+
+---
+
+## Drawing Functions
+
+### render_line
+
+```cpp
+void g_render.render_line(int x, int y, int width, int height, color color);
+```
+
+Draws a line from (x, y) to (width, height).
+
+<ParamField path="x" type="int">
+  Starting X coordinate
+</ParamField>
+
+<ParamField path="y" type="int">
+  Starting Y coordinate
+</ParamField>
+
+<ParamField path="width" type="int">
+  Ending X coordinate
+</ParamField>
+
+<ParamField path="height" type="int">
+  Ending Y coordinate
+</ParamField>
+
+<ParamField path="color" type="color">
+  Line color
+</ParamField>
+
+---
+
+### render_rectangle
+
+```cpp
+void g_render.render_rectangle(int x, int y, int width, int height, color color);
+
+template<class T = int>
+void g_render.render_rectangle(const math::vec2<T>& pos, const math::vec2<T>& size, color color);
+```
+
+Draws a rectangle outline.
+
+<ParamField path="x" type="int">
+  X coordinate
+</ParamField>
+
+<ParamField path="y" type="int">
+  Y coordinate
+</ParamField>
+
+<ParamField path="width" type="int">
+  Rectangle width
+</ParamField>
+
+<ParamField path="height" type="int">
+  Rectangle height
+</ParamField>
+
+<ParamField path="color" type="color">
+  Border color
+</ParamField>
+
+---
+
+### render_filled_rectangle
+
+```cpp
+void g_render.render_filled_rectangle(int x, int y, int width, int height, color color);
+
+template<class T>
+void g_render.render_filled_rectangle(const math::vec2<T>& pos, const math::vec2<T>& size, color color);
+```
+
+Draws a filled rectangle.
+
+<ParamField path="x" type="int">
+  X coordinate
+</ParamField>
+
+<ParamField path="y" type="int">
+  Y coordinate
+</ParamField>
+
+<ParamField path="width" type="int">
+  Rectangle width
+</ParamField>
+
+<ParamField path="height" type="int">
+  Rectangle height
+</ParamField>
+
+<ParamField path="color" type="color">
+  Fill color
+</ParamField>
+
+---
+
+### render_circle
+
+```cpp
+void g_render.render_circle(int x, int y, int radius, int segments, color color);
+
+template<class T = int>
+void g_render.render_circle(const math::vec2<T>& pos, const math::vec2<T>& size, color color);
+```
+
+Draws a circle outline.
+
+<ParamField path="x" type="int">
+  Center X coordinate
+</ParamField>
+
+<ParamField path="y" type="int">
+  Center Y coordinate
+</ParamField>
+
+<ParamField path="radius" type="int">
+  Circle radius in pixels
+</ParamField>
+
+<ParamField path="segments" type="int">
+  Number of segments (higher = smoother)
+</ParamField>
+
+<ParamField path="color" type="color">
+  Circle color
+</ParamField>
+
+---
+
+### render_gradient
+
+```cpp
+template<auto gradient_type = gradient_type_t::HORIZONTAL>
+void g_render.render_gradient(int x, int y, int width, int height, color from, color to);
+
+template<auto gradient_type = gradient_type_t::HORIZONTAL, class T = int>
+void g_render.render_gradient(const math::vec2<T>& pos, const math::vec2<T>& size, color from, color to);
+```
+
+Draws a gradient-filled rectangle.
+
+<ParamField path="gradient_type" type="gradient_type_t">
+  Gradient direction: `HORIZONTAL` or `VERTICAL`
+</ParamField>
+
+<ParamField path="from" type="color">
+  Starting color
+</ParamField>
+
+<ParamField path="to" type="color">
+  Ending color
+</ParamField>
+
+---
+
+## Text Rendering
+
+### render_text
+
+```cpp
+void g_render.render_text(
+    int x, int y,
+    unsigned int alignment,
+    const font_flags flags,
+    const char* string,
+    LPD3DXFONT font,
+    color color
+);
+
+template<class T = int>
+void g_render.render_text(
+    const math::vec2<T>& pos,
+    unsigned int alignment,
+    const font_flags flags,
+    const char* string,
+    LPD3DXFONT font,
+    color color
+);
+```
+
+Draws text with various styling options.
+
+<ParamField path="x" type="int">
+  X coordinate
+</ParamField>
+
+<ParamField path="y" type="int">
+  Y coordinate
+</ParamField>
+
+<ParamField path="alignment" type="unsigned int">
+  Text alignment flags (see Font Alignment)
+</ParamField>
+
+<ParamField path="flags" type="font_flags">
+  Text rendering flags (see Font Flags)
+</ParamField>
+
+<ParamField path="string" type="const char*">
+  Text to render
+</ParamField>
+
+<ParamField path="font" type="LPD3DXFONT">
+  Font to use
+</ParamField>
+
+<ParamField path="color" type="color">
+  Text color
+</ParamField>
+
+---
+
+### render_text_size
+
+```cpp
+D3DXVECTOR2 g_render.render_text_size(const char* string, LPD3DXFONT font);
+```
+
+Calculates the size of text in pixels.
+
+<ParamField path="string" type="const char*">
+  Text to measure
+</ParamField>
+
+<ParamField path="font" type="LPD3DXFONT">
+  Font to use for measurement
+</ParamField>
+
+**Returns:** Vector containing width (x) and height (y) in pixels
+
+---
+
+## Advanced Drawing
+
+### quadratic_curve
+
+```cpp
+template<class T = int>
+void g_render.quadratic_curve(
+    const math::vec2<T>& start,
+    const math::vec2<T>& control,
+    const math::vec2<T>& end,
+    color color
+);
+```
+
+Draws a quadratic Bezier curve.
+
+<ParamField path="start" type="const math::vec2<T>&">
+  Starting point
+</ParamField>
+
+<ParamField path="control" type="const math::vec2<T>&">
+  Control point for curve shape
+</ParamField>
+
+<ParamField path="end" type="const math::vec2<T>&">
+  Ending point
+</ParamField>
+
+<ParamField path="color" type="color">
+  Curve color
+</ParamField>
+
+---
+
+## Viewport Management
+
+### get_viewport
+
+```cpp
+D3DVIEWPORT9 g_render.get_viewport();
+```
+
+Retrieves the current DirectX viewport.
+
+**Returns:** Current viewport configuration
+
+---
+
+### set_viewport
+
+```cpp
+bool g_render.set_viewport(const math::vec2<int>& pos, const math::vec2<int>& size);
+bool g_render.set_viewport(D3DVIEWPORT9 vp);
+```
+
+Sets a custom viewport for clipping rendering.
+
+<ParamField path="pos" type="const math::vec2<int>&">
+  Viewport position
+</ParamField>
+
+<ParamField path="size" type="const math::vec2<int>&">
+  Viewport size
+</ParamField>
+
+**Returns:** `true` if successful
+
+---
+
+## Enumerations
+
+### Font Flags
+
+```cpp
+enum font_flags : unsigned {
+    FLAG_NONE,
+    FLAG_DROPSHADOW,
+    FLAG_OUTLINE,
+    FLAG_OUTLINE_SEMI
+};
+```
+
+<ResponseField name="FLAG_NONE" type="0">
+  No special rendering
+</ResponseField>
+
+<ResponseField name="FLAG_DROPSHADOW" type="1">
+  Draw text with a drop shadow
+</ResponseField>
+
+<ResponseField name="FLAG_OUTLINE" type="2">
+  Draw text with a full outline
+</ResponseField>
+
+<ResponseField name="FLAG_OUTLINE_SEMI" type="3">
+  Draw text with a semi-transparent outline
+</ResponseField>
+
+---
+
+### Font Alignment
+
+```cpp
+enum font_alignment : unsigned {
+    AL_DEFAULT           = (1 << 0),
+    AL_VERTICAL_TOP      = (1 << 1),
+    AL_VERTICAL_CENTER   = (1 << 2),
+    AL_HORIZONTAL_LEFT   = (1 << 3),
+    AL_HORIZONTAL_CENTER = (1 << 4),
+};
+```
+
+Alignment flags can be combined with bitwise OR.
+
+---
+
+### Gradient Type
+
+```cpp
+enum class gradient_type_t {
+    HORIZONTAL = 0,
+    VERTICAL
+};
+```
+
+---
+
+## Example Usage
+
+<CodeGroup>
+```cpp Basic Drawing
+// Draw a filled box with outline
+g_render.render_filled_rectangle(100, 100, 200, 50, color(30, 30, 30, 200));
+g_render.render_rectangle(100, 100, 200, 50, color::white());
+```
+
+```cpp Text Rendering
+// Create and use a font
+g_fonts.create_font(FNV1A("main_font"), 14, FW_NORMAL, true, "Verdana");
+auto font = g_fonts[FNV1A("main_font")];
+
+g_render.render_text(
+    10, 10,
+    AL_DEFAULT,
+    FLAG_OUTLINE,
+    "HotWheels SDK",
+    font,
+    color::white()
+);
+```
+
+```cpp Gradients
+// Horizontal gradient
+g_render.render_gradient<gradient_type_t::HORIZONTAL>(
+    50, 50, 300, 100,
+    color(255, 0, 0),    // Red
+    color(0, 0, 255)     // Blue
+);
+```
+
+```cpp Health Bar
+void draw_health_bar(int x, int y, int width, int height, float health_pct) {
+    // Background
+    g_render.render_filled_rectangle(x, y, width, height, color(0, 0, 0, 150));
+    
+    // Health fill
+    int health_width = static_cast<int>(width * health_pct);
+    g_render.render_filled_rectangle(x, y, health_width, height, color(0, 255, 0));
+    
+    // Border
+    g_render.render_rectangle(x, y, width, height, color::white());
+}
+```
+</CodeGroup>

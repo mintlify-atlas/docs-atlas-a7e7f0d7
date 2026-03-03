@@ -1,0 +1,397 @@
+---
+title: "Detour (Hooking)"
+description: "Function hooking API for intercepting and modifying game functions"
+---
+
+# Detour (Hooking)
+
+The `detour::hook` class provides a simple and safe interface for creating function hooks, allowing you to intercept and modify the behavior of game functions.
+
+## Overview
+
+Function hooking (detouring) allows you to:
+- Intercept calls to game functions
+- Execute custom code before/after the original function
+- Modify function parameters or return values
+- Temporarily disable or restore hooks
+
+## Class: detour::hook
+
+```cpp
+namespace detour {
+    class hook {
+    public:
+        hook() = default;
+        explicit hook(void* func, void* detour);
+        
+        bool create(void* func, void* detour);
+        bool replace();
+        bool remove();
+        bool restore();
+        bool is_hooked() const;
+        
+        template<typename T>
+        T get_original();
+    };
+}
+```
+
+---
+
+## Constructors
+
+### Default Constructor
+
+```cpp
+detour::hook();
+```
+
+Creates an empty hook object.
+
+---
+
+### Parameterized Constructor
+
+```cpp
+detour::hook(void* func, void* detour);
+```
+
+Creates a hook object with target function and detour.
+
+<ParamField path="func" type="void*">
+  Pointer to the function to hook
+</ParamField>
+
+<ParamField path="detour" type="void*">
+  Pointer to your detour/hook function
+</ParamField>
+
+<Note>
+  The constructor does not automatically activate the hook. Call `replace()` to activate it.
+</Note>
+
+---
+
+## Methods
+
+### create
+
+```cpp
+bool create(void* func, void* detour);
+```
+
+Initializes the hook with a target function and detour.
+
+<ParamField path="func" type="void*">
+  Pointer to the function to hook
+</ParamField>
+
+<ParamField path="detour" type="void*">
+  Pointer to your detour/hook function
+</ParamField>
+
+**Returns:** `true` if hook was successfully created, `false` otherwise
+
+---
+
+### replace
+
+```cpp
+bool replace();
+```
+
+Activates the hook, redirecting calls from the original function to your detour.
+
+**Returns:** `true` if hook was successfully activated, `false` otherwise
+
+<Note>
+  Call this after `create()` to activate the hook. The original function will be backed up automatically.
+</Note>
+
+---
+
+### remove
+
+```cpp
+bool remove();
+```
+
+Deactivates the hook, restoring the original function.
+
+**Returns:** `true` if hook was successfully removed, `false` otherwise
+
+---
+
+### restore
+
+```cpp
+bool restore();
+```
+
+Reactivates a previously removed hook.
+
+**Returns:** `true` if hook was successfully restored, `false` otherwise
+
+---
+
+### is_hooked
+
+```cpp
+bool is_hooked() const;
+```
+
+Checks if the hook is currently active.
+
+**Returns:** `true` if hook is active, `false` otherwise
+
+---
+
+### get_original
+
+```cpp
+template<typename T>
+T get_original();
+```
+
+Retrieves a typed pointer to the original function (trampoline).
+
+<ParamField path="T" type="template parameter">
+  Function pointer type to cast the original function to
+</ParamField>
+
+**Returns:** Typed function pointer to call the original function
+
+<Note>
+  Use this within your detour to call the original function. The type `T` should match the function signature.
+</Note>
+
+---
+
+## Usage Pattern
+
+### Basic Hook Example
+
+<CodeGroup>
+```cpp Define Hook
+// Original function signature
+using present_fn = HRESULT(__stdcall*)(IDirect3DDevice9*, RECT*, RECT*, HWND, RGNDATA*);
+
+// Hook object
+detour::hook present_hook;
+
+// Your detour function
+HRESULT __stdcall present_detour(
+    IDirect3DDevice9* device,
+    RECT* src_rect,
+    RECT* dst_rect,
+    HWND dst_window,
+    RGNDATA* dirty_region
+) {
+    // Your code before original function
+    g_render.setup_state();
+    
+    // Draw custom elements
+    g_render.render_text(10, 10, AL_DEFAULT, FLAG_OUTLINE, "Hooked!", font, color::white());
+    
+    g_render.finish_state();
+    
+    // Call original function
+    return present_hook.get_original<present_fn>()(
+        device, src_rect, dst_rect, dst_window, dirty_region
+    );
+}
+```
+
+```cpp Initialize Hook
+void setup_hooks() {
+    // Get address of target function
+    void* present_addr = get_present_address();
+    
+    // Create and activate hook
+    present_hook.create(present_addr, &present_detour);
+    present_hook.replace();
+}
+```
+
+```cpp Cleanup
+void cleanup_hooks() {
+    if (present_hook.is_hooked()) {
+        present_hook.remove();
+    }
+}
+```
+</CodeGroup>
+
+---
+
+## Advanced Examples
+
+### Method Hook with This Pointer
+
+```cpp
+// Original member function signature
+using create_move_fn = bool(__thiscall*)(void*, float, void*);
+
+detour::hook create_move_hook;
+
+bool __stdcall create_move_detour(float sample_time, void* cmd) {
+    // Get 'this' pointer from stack (thiscall convention)
+    void* this_ptr;
+    __asm { mov this_ptr, ecx }
+    
+    // Your code here
+    // ... modify cmd ...
+    
+    // Call original
+    return create_move_hook.get_original<create_move_fn>()(
+        this_ptr, sample_time, cmd
+    );
+}
+```
+
+---
+
+### Conditional Hook Activation
+
+```cpp
+detour::hook wallhack_hook;
+bool wallhack_enabled = false;
+
+void toggle_wallhack() {
+    wallhack_enabled = !wallhack_enabled;
+    
+    if (wallhack_enabled) {
+        wallhack_hook.restore();
+    } else {
+        wallhack_hook.remove();
+    }
+}
+```
+
+---
+
+### Parameter Modification
+
+```cpp
+using fire_bullet_fn = void(__thiscall*)(
+    void* this_ptr,
+    vec3 start,
+    vec3 direction,
+    float spread,
+    float damage
+);
+
+detour::hook fire_bullet_hook;
+
+void __stdcall fire_bullet_detour(
+    vec3 start,
+    vec3 direction,
+    float spread,
+    float damage
+) {
+    void* this_ptr;
+    __asm { mov this_ptr, ecx }
+    
+    // Remove spread for perfect accuracy
+    spread = 0.0f;
+    
+    // Call original with modified parameters
+    fire_bullet_hook.get_original<fire_bullet_fn>()(
+        this_ptr, start, direction, spread, damage
+    );
+}
+```
+
+---
+
+### Return Value Modification
+
+```cpp
+using is_visible_fn = bool(__thiscall*)(void*, void* entity);
+
+detour::hook is_visible_hook;
+
+bool __stdcall is_visible_detour(void* entity) {
+    void* this_ptr;
+    __asm { mov this_ptr, ecx }
+    
+    // Always return true for wallhack
+    if (wallhack_enabled) {
+        return true;
+    }
+    
+    // Call original
+    return is_visible_hook.get_original<is_visible_fn>()(this_ptr, entity);
+}
+```
+
+---
+
+## Best Practices
+
+<Note>
+**Important Guidelines:**
+
+1. **Always check `is_hooked()`** before removing hooks to avoid double-free
+2. **Store hook objects globally** or ensure they outlive the hook lifetime
+3. **Match calling conventions** (`__stdcall`, `__thiscall`, `__cdecl`) exactly
+4. **Handle `this` pointer** correctly for member functions (`__thiscall`)
+5. **Remove hooks on unload** to prevent crashes
+6. **Test hooks thoroughly** - incorrect hooks can crash the game
+7. **Use pattern scanning** to find function addresses dynamically
+</Note>
+
+---
+
+## Common Calling Conventions
+
+<CodeGroup>
+```cpp __stdcall
+// Standard call (Win32 API)
+using func_fn = int(__stdcall*)(int param);
+
+int __stdcall my_detour(int param) {
+    return hook.get_original<func_fn>()(param);
+}
+```
+
+```cpp __thiscall
+// Member function call (C++ methods)
+using method_fn = void(__thiscall*)(void* this_ptr, int param);
+
+void __stdcall my_detour(int param) {
+    void* this_ptr;
+    __asm { mov this_ptr, ecx }  // Get 'this' from ECX
+    
+    hook.get_original<method_fn>()(this_ptr, param);
+}
+```
+
+```cpp __cdecl
+// C declaration (default for C functions)
+using func_fn = int(__cdecl*)(int param);
+
+int __cdecl my_detour(int param) {
+    return hook.get_original<func_fn>()(param);
+}
+```
+</CodeGroup>
+
+---
+
+## Troubleshooting
+
+**Hook not working:**
+- Verify function address is correct using a debugger
+- Check calling convention matches the original function
+- Ensure `replace()` was called after `create()`
+
+**Game crashes:**
+- Verify function signature matches exactly
+- Check stack alignment and parameter passing
+- Ensure you're calling the original function correctly
+- Remove hooks properly on unload
+
+**Original function not called:**
+- Verify `get_original<T>()` template type matches function signature
+- Ensure you're passing all parameters correctly

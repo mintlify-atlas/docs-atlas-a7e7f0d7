@@ -1,0 +1,222 @@
+---
+title: "PaintTraverse Hook"
+description: "Hook into panel rendering to draw custom overlays and UI elements"
+---
+
+## Overview
+
+The `paint_traverse` hook is called when the game renders UI panels, allowing you to draw custom overlays, ESP (Extra Sensory Perception) elements, and modify input states. This is the primary hook for implementing visual features.
+
+<Note>
+  This hook is called at virtual table index 41 of the `i_panel` interface.
+</Note>
+
+## Hook Signature
+
+```cpp
+void __fastcall paint_traverse_detour(
+    sdk::i_panel* self,
+    void* edx,
+    unsigned int panel,
+    bool force_repaint,
+    bool allow_force
+)
+```
+
+### Parameters
+
+<ParamField path="self" type="sdk::i_panel*">
+  Pointer to the panel interface instance
+</ParamField>
+
+<ParamField path="edx" type="void*">
+  EDX register (fastcall convention) - not used
+</ParamField>
+
+<ParamField path="panel" type="unsigned int">
+  The panel ID being rendered
+</ParamField>
+
+<ParamField path="force_repaint" type="bool">
+  Whether to force a repaint of the panel
+</ParamField>
+
+<ParamField path="allow_force" type="bool">
+  Whether force painting is allowed
+</ParamField>
+
+## When It's Called
+
+This hook is called for every panel being rendered. You typically want to filter for specific panels using their names. The most common panel to hook is `"FocusOverlayPanel"`, which is rendered on top of the game world.
+
+## Common Use Cases
+
+### Identifying Target Panel
+
+Use panel name hashing to identify the correct panel:
+
+```cpp
+const auto panel_hash = HASH(g_interfaces.panel->panel_name(panel));
+
+if (panel_hash == HASH("FocusOverlayPanel")) {
+    // Your rendering code here
+}
+```
+
+### Getting View Matrix
+
+Cache the world-to-screen matrix for ESP calculations:
+
+```cpp
+if (panel_hash == HASH("FocusOverlayPanel")) {
+    g_ctx.view_matrix = g_interfaces.engine->world_to_screen_matrix();
+}
+```
+
+### ESP Rendering
+
+Render visual overlays for players:
+
+```cpp
+for (auto& player_info : g_entity_list.players) {
+    auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(
+        player_info.m_index
+    );
+    
+    if ((!player_info.m_valid && !player_info.m_dormant_info.m_valid) || !player)
+        continue;
+    
+    visuals::esp_object& object = g_visuals.esp_objects[player->entity_index()];
+    
+    // Draw ESP elements
+}
+```
+
+### Dormant Player Rendering
+
+Handle rendering for dormant (not visible) players using sound-based positioning:
+
+```cpp
+if (!player_info.m_valid && 
+    sdk::ticks_to_time(g_interfaces.globals->tick_count - 
+                       player_info.m_dormant_info.m_found_tick) < 3.f) {
+    player->set_abs_origin(
+        sdk::ticks_to_time(g_interfaces.globals->tick_count - 
+                          player_info.m_dormant_info.m_vouchable_tick) < 3.f
+            ? player_info.m_dormant_info.m_vouchable_position
+            : player_info.m_dormant_info.m_last_position
+    );
+    player->invalidate_bone_cache();
+}
+```
+
+### Bounding Box Calculations
+
+Cache player bounding boxes for ESP:
+
+```cpp
+auto collideable = object.m_owner->get_collideable();
+
+if (collideable) {
+    player_info.m_mins = collideable->obb_mins();
+    player_info.m_maxs = collideable->obb_maxs();
+    player_info.m_rgfl = player->rgfl_coordinate_frame();
+}
+```
+
+### Menu Input Control
+
+Control keyboard and mouse input based on menu state:
+
+```cpp
+if (g_menu.menu_open) {
+    g_interfaces.panel->set_input_keyboard_state(panel, true);
+    g_interfaces.panel->set_input_mouse_state(panel, true);
+} else {
+    g_interfaces.panel->set_input_keyboard_state(panel, false);
+    g_interfaces.panel->set_input_mouse_state(panel, false);
+}
+```
+
+<Warning>
+  Always call the original function after your rendering code to ensure the game continues to render properly:
+  ```cpp
+  hooks::paint_traverse_hook.call_original<void>(
+      self, edx, panel, force_repaint, allow_force
+  );
+  ```
+</Warning>
+
+## Implementation Example
+
+<CodeGroup>
+```cpp paint_traverse.h
+CREATE_HOOK_HELPER(
+    paint_traverse_hook,
+    void(__fastcall)(sdk::i_panel*, void*, unsigned int, bool, bool)
+);
+
+static void __fastcall paint_traverse_detour(
+    sdk::i_panel* self,
+    void* edx,
+    unsigned int panel,
+    bool force_repaint,
+    bool allow_force
+);
+```
+
+```cpp paint_traverse.cpp
+void __fastcall hooks::paint_traverse::paint_traverse_detour(
+    sdk::i_panel* self,
+    void* edx,
+    unsigned int panel,
+    bool force_repaint,
+    bool allow_force
+)
+{
+    const auto panel_hash = HASH(g_interfaces.panel->panel_name(panel));
+    
+    if (panel_hash == HASH("FocusOverlayPanel")) {
+        g_ctx.view_matrix = g_interfaces.engine->world_to_screen_matrix();
+        
+        // Render ESP
+        for (auto& player_info : g_entity_list.players) {
+            // ESP rendering logic
+        }
+        
+        // Handle menu input
+        if (g_menu.menu_open) {
+            g_interfaces.panel->set_input_keyboard_state(panel, true);
+            g_interfaces.panel->set_input_mouse_state(panel, true);
+        }
+    }
+    
+    hooks::paint_traverse_hook.call_original<void>(
+        self, edx, panel, force_repaint, allow_force
+    );
+}
+```
+</CodeGroup>
+
+## Source Files
+
+- Header: `globals/hooks/paint_traverse/paint_traverse.h:14-26`
+- Implementation: `globals/hooks/paint_traverse/paint_traverse.cpp:7-68`
+
+## Initialization
+
+```cpp
+void init()
+{
+    hooks::paint_traverse_hook.create(
+        virtual_func::get(g_interfaces.panel, 41),
+        paint_traverse_detour,
+        _("paint_traverse_detour")
+    );
+}
+```
+
+## See Also
+
+- [Draw Model Execute](/api/hooks/draw-model-execute) - For rendering 3D models
+- [Frame Stage Notify](/api/hooks/frame-stage-notify) - For frame-based updates

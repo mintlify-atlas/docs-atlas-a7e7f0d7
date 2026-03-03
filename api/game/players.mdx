@@ -1,0 +1,518 @@
+---
+title: "Players"
+description: "Player entity classes including c_base_player and c_cs_player"
+---
+
+## c_base_player
+
+Base player class providing core player functionality including health, movement, view angles, and visibility checks.
+
+**Source:** `game/sdk/classes/c_base_player.h:14`
+
+**Inherits:** `c_base_combat_character`
+
+### Network Variables
+
+<ParamField path="health" type="std::int32_t">
+  Current player health (0-100, can exceed 100 with buffs)
+  
+  **Netvar:** `CBasePlayer::m_iHealth`
+  
+  ```cpp
+  if (player->health() <= 0) {
+      // Player is dead
+  }
+  ```
+</ParamField>
+
+<ParamField path="life_state" type="std::int32_t">
+  Life state of the player (alive, dying, dead)
+  
+  **Netvar:** `CBasePlayer::m_lifeState`
+</ParamField>
+
+<ParamField path="tick_base" type="std::int32_t">
+  Current tick count for the player's simulation
+  
+  **Netvar:** `CBasePlayer::m_nTickBase`
+</ParamField>
+
+<ParamField path="view_offset" type="math::vec3">
+  Offset from origin to eye position
+  
+  **Netvar:** `CBasePlayer::m_vecViewOffset[0]`
+  
+  ```cpp
+  math::vec3 eye_pos = player->vector_origin() + player->view_offset();
+  ```
+</ParamField>
+
+<ParamField path="view_punch_angle" type="math::vec3">
+  View punch angles (recoil visual effect)
+  
+  **Netvar:** `CBasePlayer::m_viewPunchAngle`
+</ParamField>
+
+<ParamField path="aim_punch_angle" type="math::vec3">
+  Aim punch angles (actual recoil affecting bullets)
+  
+  **Netvar:** `CBasePlayer::m_aimPunchAngle`
+  
+  ```cpp
+  math::vec3 recoil_offset = player->aim_punch_angle() * 2.0f;
+  math::vec3 compensated_angle = view_angle - recoil_offset;
+  ```
+</ParamField>
+
+<ParamField path="view_model" type="std::uintptr_t">
+  Handle to the player's first-person view model
+  
+  **Netvar:** `CBasePlayer::m_hViewModel[0]`
+</ParamField>
+
+<ParamField path="flags" type="sdk::bit_flag_t<std::int32_t>">
+  Player state flags (on ground, ducking, in water, etc.)
+  
+  **Netvar:** `CBasePlayer::m_fFlags`
+  
+  ```cpp
+  if (player->flags() & FL_ONGROUND) {
+      // Player is on the ground
+  }
+  ```
+</ParamField>
+
+<ParamField path="velocity" type="math::vec3">
+  Current velocity vector
+  
+  **Netvar:** `CBasePlayer::m_vecVelocity[0]`
+</ParamField>
+
+<ParamField path="max_speed" type="float">
+  Maximum movement speed for the player
+  
+  **Netvar:** `CBasePlayer::m_flMaxspeed`
+</ParamField>
+
+<ParamField path="observer_target" type="std::uintptr_t">
+  Handle to the entity being spectated (when dead)
+  
+  **Netvar:** `CBasePlayer::m_hObserverTarget`
+</ParamField>
+
+<ParamField path="duck_speed" type="float">
+  Speed of the ducking animation
+  
+  **Netvar:** `CBasePlayer::m_flDuckSpeed`
+</ParamField>
+
+<ParamField path="duck_amount" type="float">
+  Duck animation progress (0.0 = standing, 1.0 = fully ducked)
+  
+  **Netvar:** `CBasePlayer::m_flDuckAmount`
+</ParamField>
+
+<ParamField path="last_place_name" type="char">
+  Name of the last location the player was at
+  
+  **Netvar:** `CBasePlayer::m_szLastPlaceName`
+</ParamField>
+
+<ParamField path="fall_velocity" type="float">
+  Vertical velocity when falling
+  
+  **Netvar:** `CBasePlayer::m_flFallVelocity`
+</ParamField>
+
+### Offsets
+
+<ParamField path="current_command" type="c_user_cmd*&">
+  Reference to the current user command being processed
+  
+  **Offset:** 0xCD2
+</ParamField>
+
+<ParamField path="button_forced" type="sdk::int_flag_t&">
+  Forced button flags
+  
+  **Offset:** 0xCD1
+</ParamField>
+
+<ParamField path="button_disabled" type="sdk::int_flag_t&">
+  Disabled button flags
+  
+  **Offset:** 0xCD0
+</ParamField>
+
+### Methods
+
+<ResponseField name="move_type" type="sdk::int_flag_t&">
+  Returns reference to the player's movement type flag
+  
+  **Returns:** Movement type (walk, noclip, ladder, etc.)
+</ResponseField>
+
+<ResponseField name="pre_think" type="void">
+  Called before player simulation to update player state
+  
+  **Virtual Index:** 318
+  
+  ```cpp
+  player->pre_think();
+  ```
+</ResponseField>
+
+<ResponseField name="post_think" type="void">
+  Called after player simulation to finalize player state
+  
+  **Virtual Index:** 319
+</ResponseField>
+
+<ResponseField name="select_item" type="void">
+  Selects an item/weapon for the player
+  
+  **Parameters:**
+  - `item` - Item name
+  - `sub_type` - Item sub-type
+  
+  **Virtual Index:** 330
+</ResponseField>
+
+<ResponseField name="set_prediction_random_seed" type="void (static)">
+  Sets the random seed for prediction
+  
+  **Parameters:**
+  - `command` - User command containing random seed, or `nullptr` to clear
+  
+  ```cpp
+  c_base_player::set_prediction_random_seed(cmd);
+  ```
+</ResponseField>
+
+<ResponseField name="set_prediction_player" type="void (static)">
+  Sets the player entity for prediction
+  
+  **Parameters:**
+  - `entity` - Entity to set as predicted player
+  
+  ```cpp
+  c_base_player::set_prediction_player(local_player);
+  ```
+</ResponseField>
+
+<ResponseField name="determine_simulation_ticks" type="int">
+  Determines how many simulation ticks are needed
+  
+  **Returns:** Number of simulation ticks
+</ResponseField>
+
+<ResponseField name="adjust_player_timebase" type="void">
+  Adjusts the player's timebase for simulation
+  
+  **Parameters:**
+  - `simulation_ticks` - Number of ticks to adjust by
+</ResponseField>
+
+<ResponseField name="eye_position" type="math::vec3">
+  Calculates the player's eye position (camera position)
+  
+  **Returns:** World position of player's eyes
+  
+  ```cpp
+  math::vec3 camera_pos = player->eye_position();
+  ```
+</ResponseField>
+
+<ResponseField name="can_see_player" type="bool">
+  Performs ray trace to check if this player can see another player
+  
+  **Parameters:**
+  - `player` - Target player to check visibility to
+  
+  **Returns:** `true` if target player is visible
+  
+  ```cpp
+  if (local_player->can_see_player(enemy)) {
+      // Enemy is visible, can shoot
+  }
+  ```
+  
+  <Expandable title="Overloads">
+    ### With specific hitgroup
+    
+    **Parameters:**
+    - `player` - Target player
+    - `hitgroup` - Specific hitgroup to check (head, chest, etc.)
+    
+    ```cpp
+    if (local->can_see_player(enemy, sdk::hitgroup::HITGROUP_HEAD)) {
+        // Can see enemy's head
+    }
+    ```
+    
+    ### With custom start/end positions
+    
+    **Parameters:**
+    - `player` - Target player
+    - `hitgroup` - Hitgroup to check
+    - `start` - Start position for ray
+    - `end` - End position for ray
+    
+    ```cpp
+    bool visible = local->can_see_player(enemy, sdk::hitgroup::HITGROUP_CHEST, start_pos, end_pos);
+    ```
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="can_see_player_ignore_walls" type="bool">
+  Checks if player can see target ignoring walls (only checks if entity is hit)
+  
+  **Parameters:**
+  - `player` - Target player
+  - `hitgroup` - Hitgroup to check
+  - `start` - Start position
+  - `end` - End position
+  
+  **Returns:** `true` if ray hits the target player
+</ResponseField>
+
+---
+
+## c_cs_player
+
+CS:GO-specific player class with Counter-Strike gameplay features.
+
+**Source:** `game/sdk/classes/c_cs_player.h:12`
+
+**Inherits:** `c_base_player`
+
+### Template Methods
+
+<ResponseField name="get<T>" type="T&">
+  Generic getter for offset-based values
+  
+  **Parameters:**
+  - `offset` - Memory offset from player base
+  
+  **Returns:** Reference to value at offset
+  
+  ```cpp
+  float& some_value = player->get<float>(0x1234);
+  ```
+</ResponseField>
+
+<ResponseField name="set<T>" type="void">
+  Generic setter for offset-based values
+  
+  **Parameters:**
+  - `offset` - Memory offset from player base
+  - `val` - Value to set
+  
+  ```cpp
+  player->set<float>(0x1234, 1.0f);
+  ```
+</ResponseField>
+
+### Network Variables
+
+<ParamField path="has_defuser" type="bool">
+  Whether the player has a defuse kit
+  
+  **Netvar:** `CCSPlayer::m_bHasDefuser`
+</ParamField>
+
+<ParamField path="gun_game_immunity" type="bool">
+  Gun game spawn immunity status
+  
+  **Netvar:** `CCSPlayer::m_bGunGameImmunity`
+</ParamField>
+
+<ParamField path="shots_fired" type="std::int32_t">
+  Number of consecutive shots fired (resets when stopped firing)
+  
+  **Netvar:** `CCSPlayer::m_iShotsFired`
+  
+  ```cpp
+  int recoil_index = player->shots_fired();
+  // Use for recoil compensation pattern lookup
+  ```
+</ParamField>
+
+<ParamField path="eye_angles" type="math::vec3">
+  Player's eye angles (where they're actually looking)
+  
+  **Netvar:** `CCSPlayer::m_angEyeAngles`
+</ParamField>
+
+<ParamField path="armor_value" type="int">
+  Current armor points (0-100)
+  
+  **Netvar:** `CCSPlayer::m_ArmorValue`
+</ParamField>
+
+<ParamField path="has_heavy_armor" type="bool">
+  Whether player has heavy armor equipped
+  
+  **Netvar:** `CCSPlayer::m_bHasHeavyArmor`
+</ParamField>
+
+<ParamField path="has_helmet" type="bool">
+  Whether player has a helmet
+  
+  **Netvar:** `CCSPlayer::m_bHasHelmet`
+</ParamField>
+
+<ParamField path="is_scoped" type="bool">
+  Whether player is scoped with a sniper rifle
+  
+  **Netvar:** `CCSPlayer::m_bIsScoped`
+</ParamField>
+
+<ParamField path="lower_body_yaw_target" type="float">
+  Target yaw for the lower body animation
+  
+  **Netvar:** `CCSPlayer::m_flLowerBodyYawTarget`
+</ParamField>
+
+<ParamField path="flash_max_alpha" type="float">
+  Maximum alpha value for flashbang effect
+  
+  **Netvar:** `CCSPlayer::m_flFlashMaxAlpha`
+  
+  ```cpp
+  if (player->flash_max_alpha() > 200.0f) {
+      // Player is heavily flashed
+  }
+  ```
+</ParamField>
+
+<ParamField path="account" type="std::int32_t">
+  Player's money/account balance
+  
+  **Netvar:** `CCSPlayer::m_iAccount`
+</ParamField>
+
+<ParamField path="flash_duration" type="float">
+  Duration of current flashbang effect
+  
+  **Netvar:** `CCSPlayer::m_flFlashDuration`
+</ParamField>
+
+<ParamField path="stamina" type="float">
+  Player stamina level
+  
+  **Netvar:** `CCSPlayer::m_flStamina`
+</ParamField>
+
+### Methods
+
+<ResponseField name="is_enemy" type="bool">
+  Checks if another player is an enemy
+  
+  **Parameters:**
+  - `player` - Player to check
+  
+  **Returns:** `true` if the player is an enemy
+  
+  ```cpp
+  if (local_player->is_enemy(other_player)) {
+      // Other player is on opposite team
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="is_alive" type="bool">
+  Checks if the player is alive
+  
+  **Returns:** `true` if player is alive
+  
+  ```cpp
+  if (!player->is_alive()) {
+      continue; // Skip dead players
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="name" type="std::string">
+  Gets the player's name
+  
+  **Returns:** Player name as string
+  
+  ```cpp
+  std::string player_name = player->name();
+  ```
+</ResponseField>
+
+<ResponseField name="update_client_side_animation" type="void">
+  Updates client-side animations for the player
+  
+  ```cpp
+  player->update_client_side_animation();
+  ```
+</ResponseField>
+
+<ResponseField name="set_local_view_angles" type="void">
+  Sets the local view angles for the player
+  
+  **Parameters:**
+  - `view_angles` - New view angles to set
+  
+  ```cpp
+  player->set_local_view_angles(math::vec3{0.0f, 90.0f, 0.0f});
+  ```
+</ResponseField>
+
+---
+
+## Usage Examples
+
+### Check player visibility
+
+```cpp
+auto local = g_interfaces.entity_list->get_client_entity<c_cs_player*>(g_interfaces.engine->get_local_player());
+
+for (int i = 1; i <= g_interfaces.engine->get_max_clients(); i++) {
+    auto player = g_interfaces.entity_list->get_client_entity<c_cs_player*>(i);
+    
+    if (!player || !player->is_alive() || player == local)
+        continue;
+        
+    if (!local->is_enemy(player))
+        continue;
+        
+    if (local->can_see_player(player, sdk::hitgroup::HITGROUP_HEAD)) {
+        // Can see enemy head
+    }
+}
+```
+
+### Recoil compensation
+
+```cpp
+auto local = /* get local player */;
+math::vec3 aim_angle = /* current aim angle */;
+
+math::vec3 punch = local->aim_punch_angle();
+math::vec3 compensated = aim_angle - (punch * 2.0f);
+
+local->set_local_view_angles(compensated);
+```
+
+### Movement state detection
+
+```cpp
+auto player = /* get player */;
+
+bool on_ground = player->flags() & FL_ONGROUND;
+bool ducking = player->flags() & FL_DUCKING;
+
+float speed = player->velocity().length_2d();
+
+if (on_ground && speed < 5.0f && !ducking) {
+    // Player is standing still
+}
+```
+
+<Note>
+  The inheritance chain `c_cs_player` → `c_base_player` → `c_base_combat_character` → `c_base_animating` → `c_base_entity` means that `c_cs_player` has access to all methods and properties from parent classes.
+</Note>

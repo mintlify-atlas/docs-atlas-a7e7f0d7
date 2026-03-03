@@ -1,0 +1,315 @@
+---
+title: "Console"
+description: "Logging and console output system for debugging"
+---
+
+The console utility provides a colored logging system for debugging and runtime information display.
+
+## Initialization
+
+### init
+
+Initialize the console window.
+
+```cpp
+bool console::init()
+```
+
+```cpp
+if (!console::init()) {
+    MessageBox(nullptr, "Failed to initialize console", "Error", MB_OK);
+    return false;
+}
+```
+
+<ParamField path="return" type="bool">
+  Returns true if console was successfully created, false otherwise
+</ParamField>
+
+<Note>
+  Call this once during DLL initialization to create a console window for your cheat.
+</Note>
+
+### unload
+
+Clean up and free the console.
+
+```cpp
+void console::unload()
+```
+
+```cpp
+console::unload();
+FreeLibrary(hModule);
+```
+
+## Logging
+
+### print
+
+Print formatted messages to the console with color-coded log levels.
+
+```cpp
+template<console::log_level lev, typename... VA>
+void print(std::string_view print, VA&&... args)
+```
+
+<CodeGroup>
+```cpp Normal Messages
+console::print<console::log_level::NORMAL>("SDK initialized");
+console::print<console::log_level::NORMAL>("Player count: {}", playerCount);
+```
+
+```cpp Debug Messages
+console::print<console::log_level::DEBUG>("Hooking function at {:#x}", address);
+console::print<console::log_level::DEBUG>("FOV: {:.2f}", fov);
+```
+
+```cpp Success Messages
+console::print<console::log_level::SUCCESS>("Hook installed successfully");
+console::print<console::log_level::SUCCESS>("Config loaded: {}", filename);
+```
+
+```cpp Warnings
+console::print<console::log_level::WARNING>("Invalid player index: {}", index);
+console::print<console::log_level::WARNING>("Signature scan failed for {}", pattern);
+```
+
+```cpp Fatal Errors
+console::print<console::log_level::FATAL>("Failed to find interface: {}", name);
+console::print<console::log_level::FATAL>("Critical error at {:#x}", address);
+```
+</CodeGroup>
+
+## Log Levels
+
+### log_level Enum
+
+<ParamField path="NORMAL" type="log_level">
+  Standard information messages (default white color)
+</ParamField>
+
+<ParamField path="DEBUG" type="log_level">
+  Debug information for development (cyan color)
+</ParamField>
+
+<ParamField path="SUCCESS" type="log_level">
+  Success/confirmation messages (green color)
+</ParamField>
+
+<ParamField path="WARNING" type="log_level">
+  Warning messages for non-critical issues (yellow color)
+</ParamField>
+
+<ParamField path="FATAL" type="log_level">
+  Fatal errors and critical failures (red color)
+</ParamField>
+
+## Console Colors
+
+The logging system uses Windows console colors defined in `log_colors` enum:
+
+```cpp
+enum log_colors : int {
+    BLACK = 0,
+    DARK_BLUE = 1,
+    DARK_GREEN,
+    DARK_CYAN,
+    DARK_RED,
+    DARK_PURPLE,
+    DARK_YELLOW,
+    DARK_WHITE,
+    GRAY,
+    BLUE,
+    GREEN,
+    CYAN,
+    RED,
+    PURPLE,
+    YELLOW,
+    WHITE
+};
+```
+
+### set_console_color
+
+Manually set console text color.
+
+```cpp
+void set_console_color(const console::log_level level)
+```
+
+<Note>
+  This function is called automatically by `print()`. You rarely need to use it directly.
+</Note>
+
+## String Formatting
+
+### format
+
+Format a string with arguments (used internally by `print`).
+
+```cpp
+template<typename... VA>
+std::string format(std::string_view fmt, VA&&... args)
+```
+
+```cpp
+std::string message = console::format("Player {} at position ({}, {}, {})", 
+                                     playerName, x, y, z);
+```
+
+## Common Patterns
+
+### Initialization Logging
+
+```cpp
+DWORD WINAPI MainThread(LPVOID param) {
+    if (!console::init()) {
+        return 1;
+    }
+    
+    console::print<console::log_level::NORMAL>("=== HotWheels SDK ===");
+    console::print<console::log_level::NORMAL>("Version: 1.0.0");
+    console::print<console::log_level::NORMAL>("Initializing...");
+    
+    if (!g_interfaces.init()) {
+        console::print<console::log_level::FATAL>("Failed to initialize interfaces");
+        console::unload();
+        return 1;
+    }
+    
+    console::print<console::log_level::SUCCESS>("Interfaces initialized");
+    
+    // More initialization...
+    
+    console::print<console::log_level::SUCCESS>("SDK loaded successfully");
+    return 0;
+}
+```
+
+### Debug Logging
+
+```cpp
+void update_entity_list() {
+    console::print<console::log_level::DEBUG>("Updating entity list...");
+    
+    int validPlayers = 0;
+    for (int i = 0; i < 65; i++) {
+        auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(i);
+        if (!player || !player->is_alive())
+            continue;
+            
+        validPlayers++;
+        console::print<console::log_level::DEBUG>("Player {}: {} (HP: {})", 
+                                                 i, player->name(), player->health());
+    }
+    
+    console::print<console::log_level::DEBUG>("Found {} valid players", validPlayers);
+}
+```
+
+### Error Handling
+
+```cpp
+bool load_config(const std::string& filename) {
+    console::print<console::log_level::NORMAL>("Loading config: {}", filename);
+    
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        console::print<console::log_level::WARNING>("Config file not found: {}", filename);
+        console::print<console::log_level::WARNING>("Creating default config...");
+        create_default_config(filename);
+        return false;
+    }
+    
+    try {
+        // Parse config...
+        console::print<console::log_level::SUCCESS>("Config loaded: {}", filename);
+        return true;
+    }
+    catch (const std::exception& e) {
+        console::print<console::log_level::FATAL>("Failed to parse config: {}", e.what());
+        return false;
+    }
+}
+```
+
+### Conditional Debug Logging
+
+```cpp
+#ifdef _DEBUG
+    #define DEBUG_LOG(msg, ...) console::print<console::log_level::DEBUG>(msg, __VA_ARGS__)
+#else
+    #define DEBUG_LOG(msg, ...)
+#endif
+
+void process_player(sdk::c_cs_player* player) {
+    DEBUG_LOG("Processing player: {}", player->name());
+    
+    auto origin = player->get_abs_origin();
+    DEBUG_LOG("Position: ({:.2f}, {:.2f}, {:.2f})", origin.x, origin.y, origin.z);
+    
+    // Process player...
+}
+```
+
+### Hook Status Logging
+
+```cpp
+class EndSceneHook {
+public:
+    static bool install() {
+        console::print<console::log_level::NORMAL>("Installing EndScene hook...");
+        
+        auto device = get_d3d9_device();
+        if (!device) {
+            console::print<console::log_level::FATAL>("Failed to get D3D9 device");
+            return false;
+        }
+        
+        original = hook_vtable(device, 42, &hooked);
+        if (!original) {
+            console::print<console::log_level::FATAL>("Failed to hook EndScene");
+            return false;
+        }
+        
+        console::print<console::log_level::SUCCESS>("EndScene hooked at {:#x}", 
+                                                    (uintptr_t)original);
+        return true;
+    }
+};
+```
+
+### Performance Profiling
+
+```cpp
+void profile_function() {
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    // Execute code...
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    
+    console::print<console::log_level::DEBUG>("Function took {} μs", duration.count());
+}
+```
+
+## Best Practices
+
+<Tip>
+  Use appropriate log levels:
+  - `NORMAL` for general information and user-facing messages
+  - `DEBUG` for detailed diagnostic information during development
+  - `SUCCESS` for confirmation of successful operations
+  - `WARNING` for recoverable issues that need attention
+  - `FATAL` for critical errors that prevent normal operation
+</Tip>
+
+<Tip>
+  Always unload the console before unloading your DLL to prevent crashes.
+</Tip>
+
+<Note>
+  The console uses C++20 formatting. Format specifiers like `{}`, `{:.2f}`, `{:#x}` are supported.
+</Note>

@@ -1,0 +1,394 @@
+---
+title: "Math Utilities"
+description: "Vector and matrix math operations for 3D game calculations"
+---
+
+The math utility module provides comprehensive mathematical operations for 3D vector and matrix calculations, including angle conversions, transformations, and geometric computations.
+
+## Vector Types
+
+### vec2
+
+2D vector class for screen-space coordinates and 2D calculations.
+
+```cpp
+math::vec2<float> screenPos(100.0f, 200.0f);
+float length = screenPos.length();
+float dot = screenPos.dot_product(otherVec);
+```
+
+#### Methods
+
+<ParamField path="valid()" type="bool">
+  Returns true if both components are finite numbers
+</ParamField>
+
+<ParamField path="length()" type="float">
+  Calculate the magnitude of the vector
+</ParamField>
+
+<ParamField path="length_sqr()" type="float">
+  Calculate squared magnitude (faster, avoids sqrt)
+</ParamField>
+
+<ParamField path="dot_product(vec2)" type="float">
+  Calculate dot product with another vector
+</ParamField>
+
+### vec3
+
+3D vector class for positions, angles, and directions in 3D space.
+
+```cpp
+math::vec3 position(100.0f, 200.0f, 64.0f);
+math::vec3 angle(0.0f, 90.0f, 0.0f);
+
+// Normalize the vector
+position.normalize_in_place();
+
+// Calculate distance
+float distance = position.dist_to(targetPos);
+```
+
+#### Methods
+
+<ParamField path="valid()" type="bool">
+  Check if all components are finite
+</ParamField>
+
+<ParamField path="is_zero()" type="bool">
+  Check if the vector is a zero vector
+</ParamField>
+
+<ParamField path="length()" type="float">
+  Calculate the 3D magnitude
+</ParamField>
+
+<ParamField path="length_2d()" type="float">
+  Calculate 2D magnitude (ignoring z component)
+</ParamField>
+
+<ParamField path="dist_to(vec3)" type="float">
+  Calculate distance to another point
+</ParamField>
+
+<ParamField path="normalize_in_place()" type="float">
+  Normalize the vector and return original length
+</ParamField>
+
+<ParamField path="normalize()" type="vec3&">
+  Normalize angles to valid range (x: ±360°, y: ±360°, z: ±50°)
+</ParamField>
+
+<ParamField path="clamp()" type="vec3">
+  Clamp angles (pitch: ±89°, yaw: ±180°, roll: ±50°)
+</ParamField>
+
+<ParamField path="sanitize()" type="vec3&">
+  Normalize and clamp the angles
+</ParamField>
+
+<ParamField path="dot_product(vec3)" type="float">
+  Calculate dot product
+</ParamField>
+
+<ParamField path="cross_product(vec3)" type="vec3">
+  Calculate cross product
+</ParamField>
+
+## Matrix Types
+
+### matrix_3x4
+
+3x4 transformation matrix used for bone matrices and coordinate transformations.
+
+```cpp
+math::matrix_3x4 boneMatrix;
+math::vec3 position = math::matrix_position(boneMatrix);
+```
+
+#### Static Methods
+
+<ParamField path="copy(src, dst)" type="void">
+  Copy matrix from source to destination
+</ParamField>
+
+<ParamField path="multiply(in1, in2, out)" type="void">
+  Multiply two matrices and store result
+</ParamField>
+
+### matrix_4x4
+
+4x4 matrix used for view-projection transformations.
+
+## Angle Operations
+
+### angle_vector
+
+Convert an angle to a direction vector.
+
+```cpp
+math::vec3 viewAngle(0.0f, 90.0f, 0.0f);
+math::vec3 forward = math::angle_vector(viewAngle);
+```
+
+<ParamField path="angle" type="const math::vec3&">
+  Input angle (pitch, yaw, roll)
+</ParamField>
+
+<ParamField path="return" type="math::vec3">
+  Forward direction vector
+</ParamField>
+
+### angle_vectors
+
+Convert angles to forward, right, and up vectors.
+
+```cpp
+math::vec3 forward, right, up;
+math::angle_vectors(viewAngles, &forward, &right, &up);
+```
+
+<ParamField path="angles" type="const math::vec3&">
+  Input angle
+</ParamField>
+
+<ParamField path="fw" type="math::vec3*">
+  Output forward vector (required)
+</ParamField>
+
+<ParamField path="rg" type="math::vec3*">
+  Output right vector (optional)
+</ParamField>
+
+<ParamField path="up" type="math::vec3*">
+  Output up vector (optional)
+</ParamField>
+
+### vector_angles
+
+Convert a direction vector to angles.
+
+```cpp
+math::vec3 direction(1.0f, 0.0f, 0.0f);
+math::vec3 angles;
+math::vector_angles(direction, angles);
+```
+
+### calculate_angle
+
+Calculate the angle from source position to destination position.
+
+```cpp
+math::vec3 aimAngles = math::calculate_angle(localPos, enemyPos);
+```
+
+<ParamField path="src" type="const math::vec3&">
+  Source position
+</ParamField>
+
+<ParamField path="dst" type="const math::vec3&">
+  Destination position
+</ParamField>
+
+<ParamField path="return" type="math::vec3">
+  Normalized angle from src to dst
+</ParamField>
+
+## Transformations
+
+### world_to_screen
+
+Project 3D world coordinates to 2D screen coordinates.
+
+```cpp
+math::vec3 worldPos(100.0f, 200.0f, 64.0f);
+math::vec3 screenPos;
+
+if (math::world_to_screen(worldPos, screenPos)) {
+    // screenPos now contains 2D screen coordinates
+    g_render.render_text(screenPos.x, screenPos.y, AL_DEFAULT, FLAG_NONE, "Enemy", font, color::white());
+}
+```
+
+<Tip>
+  Always check the return value - `world_to_screen` returns false if the position is behind the camera.
+</Tip>
+
+### vector_transform
+
+Transform a vector by a matrix.
+
+```cpp
+math::vec3 localPos(0.0f, 0.0f, 0.0f);
+math::matrix_3x4 boneMatrix = entity->bone_matrix(HITBOX_HEAD);
+math::vec3 worldPos = math::vector_transform(localPos, boneMatrix);
+```
+
+### matrix_position
+
+Extract position from a transformation matrix.
+
+```cpp
+math::matrix_3x4 matrix = player->bone_matrix(0);
+math::vec3 position = math::matrix_position(matrix);
+```
+
+## Angle Utilities
+
+### clamp_angle
+
+Clamp angles to valid ranges for Source Engine.
+
+```cpp
+math::vec3 angles(120.0f, 270.0f, 0.0f);
+math::clamp_angle(angles);
+// angles.x clamped to ±89°, angles.y wrapped to ±180°
+```
+
+<Note>
+  Pitch is clamped to ±89° and yaw is wrapped to ±180°. Roll is always set to 0.
+</Note>
+
+### normalize_yaw
+
+Normalize yaw angle to -180° to 180° range.
+
+```cpp
+float yaw = 270.0f;
+float normalized = math::normalize_yaw(yaw); // Returns -90.0f
+```
+
+### approach_angle
+
+Smoothly approach a target angle at a given speed.
+
+```cpp
+float currentYaw = 0.0f;
+float targetYaw = 90.0f;
+float speed = 5.0f;
+
+currentYaw = math::approach_angle(targetYaw, currentYaw, speed);
+```
+
+### get_fov
+
+Calculate field of view (FOV) between view angles and a target.
+
+```cpp
+float fov = math::get_fov(viewAngles, localPos, enemyPos);
+if (fov < 5.0f) {
+    // Enemy is within FOV crosshair
+}
+```
+
+## Conversion Functions
+
+### deg2rad / rad2deg
+
+Convert between degrees and radians.
+
+```cpp
+float radians = math::deg2rad(90.0f);  // π/2
+float degrees = math::rad2deg(3.14159f); // ~180°
+```
+
+## Utility Functions
+
+### min / max
+
+Find minimum or maximum value (supports variadic arguments).
+
+```cpp
+float minimum = math::min(5.0f, 10.0f, 3.0f);  // Returns 3.0f
+float maximum = math::max(5.0f, 10.0f, 3.0f);  // Returns 10.0f
+```
+
+### random
+
+Generate random number in range.
+
+```cpp
+float spread = math::random(-5.0f, 5.0f);
+int randomInt = math::random(1, 100);
+```
+
+## Fast Math Functions
+
+Optimized approximations for performance-critical code (in `math::util` namespace).
+
+### fast_sin / fast_cos
+
+```cpp
+float s = math::util::fast_sin(angle);
+float c = math::util::fast_cos(angle);
+```
+
+<Note>
+  These functions use polynomial approximations and are faster than `std::sin/cos` but slightly less accurate.
+</Note>
+
+### fast_sqrt
+
+SIMD-optimized square root.
+
+```cpp
+float input = 16.0f;
+float output;
+math::util::fast_sqrt(&output, &input);
+```
+
+### sin_cos
+
+Compute both sine and cosine simultaneously.
+
+```cpp
+float s, c;
+math::sin_cos(angle, &s, &c);
+```
+
+## Constants
+
+<CodeGroup>
+```cpp Pi Constants
+math::util::pi   // long double π
+math::util::pi_f // float π
+```
+</CodeGroup>
+
+## Common Patterns
+
+### Calculating Aim Angles
+
+```cpp
+math::vec3 localPos = g_ctx.local->get_abs_origin();
+math::vec3 enemyHead = enemy->get_hitbox_position(HITBOX_HEAD);
+
+math::vec3 aimAngles = math::calculate_angle(localPos, enemyHead);
+aimAngles.sanitize(); // Normalize and clamp
+```
+
+### Distance Checking
+
+```cpp
+math::vec3 delta = enemyPos - localPos;
+float distance = delta.length();
+float distanceSqr = delta.length_sqr(); // Faster for comparisons
+
+if (distanceSqr < (500.0f * 500.0f)) {
+    // Enemy within 500 units
+}
+```
+
+### Converting Bone Positions
+
+```cpp
+math::matrix_3x4 headMatrix = player->bone_matrix(HITBOX_HEAD);
+math::vec3 headPos = math::matrix_position(headMatrix);
+
+math::vec3 screenPos;
+if (math::world_to_screen(headPos, screenPos)) {
+    g_render.render_text(screenPos.x, screenPos.y, AL_DEFAULT, FLAG_NONE, 
+                        "HEAD", font, color::red());
+}
+```

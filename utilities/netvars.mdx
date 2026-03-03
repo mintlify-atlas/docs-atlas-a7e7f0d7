@@ -1,0 +1,318 @@
+---
+title: "Netvars"
+description: "Network variable offset resolution system"
+---
+
+The netvar utility provides runtime offset resolution for networked entity properties in the Source Engine. It traverses the client's networked data tables to find variable offsets dynamically.
+
+## Overview
+
+Netvars (network variables) are properties synchronized between the server and client. The netvar system allows you to find the memory offset of these properties at runtime, making your code compatible across game updates.
+
+```cpp
+// Find offset of m_iHealth in DT_BasePlayer
+uintptr_t healthOffset = netvar::get_table("DT_BasePlayer", "m_iHealth");
+
+// Use in entity class
+int health = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(player) + healthOffset);
+```
+
+## Functions
+
+### get_table
+
+Find the offset of a networked variable by table and variable name.
+
+```cpp
+std::uintptr_t get_table(const char* table, const char* var)
+```
+
+<ParamField path="table" type="const char*">
+  The name of the networked data table (e.g., "DT_BasePlayer")
+</ParamField>
+
+<ParamField path="var" type="const char*">
+  The name of the variable within the table (e.g., "m_iHealth")
+</ParamField>
+
+<ParamField path="return" type="std::uintptr_t">
+  The offset of the variable, or 0 if not found
+</ParamField>
+
+```cpp
+// Common CS:GO netvars
+auto healthOffset = netvar::get_table("DT_BasePlayer", "m_iHealth");
+auto teamOffset = netvar::get_table("DT_BaseEntity", "m_iTeamNum");
+auto flagsOffset = netvar::get_table("DT_BasePlayer", "m_fFlags");
+auto velocityOffset = netvar::get_table("DT_BasePlayer", "m_vecVelocity[0]");
+```
+
+### get_offset
+
+Recursively search a recv_table for a variable offset.
+
+```cpp
+std::uintptr_t get_offset(sdk::recv_table* table, const char* var)
+```
+
+<ParamField path="table" type="sdk::recv_table*">
+  Pointer to a recv_table to search
+</ParamField>
+
+<ParamField path="var" type="const char*">
+  The variable name to find
+</ParamField>
+
+<ParamField path="return" type="std::uintptr_t">
+  The offset of the variable within the table
+</ParamField>
+
+<Note>
+  This function is used internally by `get_table()`. You typically don't need to call it directly.
+</Note>
+
+## How It Works
+
+The netvar system works by:
+
+1. Retrieving all client classes from the client interface
+2. Searching for the specified table name using compile-time hashing
+3. Recursively traversing nested data tables
+4. Accumulating offsets through the table hierarchy
+5. Returning the final offset when the variable is found
+
+```cpp
+// Simplified flow:
+// DT_CSPlayer
+//   ├─ DT_BasePlayer (offset: 0x00)
+//   │    ├─ m_iHealth (offset: 0x100)
+//   │    └─ m_fFlags (offset: 0x104)
+//   └─ m_bHasDefuser (offset: 0x200)
+
+// get_table("DT_BasePlayer", "m_iHealth") returns 0x100
+// get_table("DT_CSPlayer", "m_bHasDefuser") returns 0x200
+```
+
+## Common Netvars
+
+### Base Entity
+
+```cpp
+namespace offsets {
+    inline uintptr_t m_iTeamNum = netvar::get_table("DT_BaseEntity", "m_iTeamNum");
+    inline uintptr_t m_vecOrigin = netvar::get_table("DT_BaseEntity", "m_vecOrigin");
+    inline uintptr_t m_nModelIndex = netvar::get_table("DT_BaseEntity", "m_nModelIndex");
+}
+```
+
+### Base Player
+
+```cpp
+namespace offsets {
+    inline uintptr_t m_iHealth = netvar::get_table("DT_BasePlayer", "m_iHealth");
+    inline uintptr_t m_lifeState = netvar::get_table("DT_BasePlayer", "m_lifeState");
+    inline uintptr_t m_fFlags = netvar::get_table("DT_BasePlayer", "m_fFlags");
+    inline uintptr_t m_vecVelocity = netvar::get_table("DT_BasePlayer", "m_vecVelocity[0]");
+    inline uintptr_t m_vecViewOffset = netvar::get_table("DT_BasePlayer", "m_vecViewOffset[0]");
+    inline uintptr_t m_hActiveWeapon = netvar::get_table("DT_BasePlayer", "m_hActiveWeapon");
+}
+```
+
+### CS Player
+
+```cpp
+namespace offsets {
+    inline uintptr_t m_bHasDefuser = netvar::get_table("DT_CSPlayer", "m_bHasDefuser");
+    inline uintptr_t m_bHasHelmet = netvar::get_table("DT_CSPlayer", "m_bHasHelmet");
+    inline uintptr_t m_ArmorValue = netvar::get_table("DT_CSPlayer", "m_ArmorValue");
+    inline uintptr_t m_iAccount = netvar::get_table("DT_CSPlayer", "m_iAccount");
+    inline uintptr_t m_bIsScoped = netvar::get_table("DT_CSPlayer", "m_bIsScoped");
+    inline uintptr_t m_bIsDefusing = netvar::get_table("DT_CSPlayer", "m_bIsDefusing");
+}
+```
+
+### Weapon
+
+```cpp
+namespace offsets {
+    inline uintptr_t m_iClip1 = netvar::get_table("DT_BaseCombatWeapon", "m_iClip1");
+    inline uintptr_t m_iClip2 = netvar::get_table("DT_BaseCombatWeapon", "m_iClip2");
+    inline uintptr_t m_flNextPrimaryAttack = netvar::get_table("DT_BaseCombatWeapon", "m_flNextPrimaryAttack");
+    inline uintptr_t m_hOwner = netvar::get_table("DT_BaseCombatWeapon", "m_hOwner");
+}
+```
+
+## Usage Patterns
+
+### Creating Offset Namespace
+
+```cpp
+namespace offsets {
+    void initialize() {
+        console::print<console::log_level::NORMAL>("Initializing netvars...");
+        
+        // Base entity
+        m_iTeamNum = netvar::get_table("DT_BaseEntity", "m_iTeamNum");
+        m_vecOrigin = netvar::get_table("DT_BaseEntity", "m_vecOrigin");
+        
+        // Base player
+        m_iHealth = netvar::get_table("DT_BasePlayer", "m_iHealth");
+        m_fFlags = netvar::get_table("DT_BasePlayer", "m_fFlags");
+        
+        console::print<console::log_level::SUCCESS>("Netvars initialized");
+    }
+    
+    inline uintptr_t m_iTeamNum;
+    inline uintptr_t m_vecOrigin;
+    inline uintptr_t m_iHealth;
+    inline uintptr_t m_fFlags;
+}
+```
+
+### Using Netvars in Entity Classes
+
+```cpp
+class c_base_entity {
+public:
+    int team() {
+        static auto offset = netvar::get_table("DT_BaseEntity", "m_iTeamNum");
+        return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + offset);
+    }
+    
+    math::vec3 origin() {
+        static auto offset = netvar::get_table("DT_BaseEntity", "m_vecOrigin");
+        return *reinterpret_cast<math::vec3*>(reinterpret_cast<uintptr_t>(this) + offset);
+    }
+};
+
+class c_base_player : public c_base_entity {
+public:
+    int health() {
+        static auto offset = netvar::get_table("DT_BasePlayer", "m_iHealth");
+        return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + offset);
+    }
+    
+    int flags() {
+        static auto offset = netvar::get_table("DT_BasePlayer", "m_fFlags");
+        return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + offset);
+    }
+    
+    bool is_alive() {
+        return health() > 0;
+    }
+    
+    bool is_on_ground() {
+        return flags() & FL_ONGROUND;
+    }
+};
+```
+
+### Macro-Based Netvar Definition
+
+```cpp
+#define NETVAR(func_name, type, table, var) \
+    type& func_name() { \
+        static auto offset = netvar::get_table(table, var); \
+        return *reinterpret_cast<type*>(reinterpret_cast<uintptr_t>(this) + offset); \
+    }
+
+class c_cs_player : public c_base_player {
+public:
+    NETVAR(has_defuser, bool, "DT_CSPlayer", "m_bHasDefuser")
+    NETVAR(has_helmet, bool, "DT_CSPlayer", "m_bHasHelmet")
+    NETVAR(armor_value, int, "DT_CSPlayer", "m_ArmorValue")
+    NETVAR(account, int, "DT_CSPlayer", "m_iAccount")
+    NETVAR(is_scoped, bool, "DT_CSPlayer", "m_bIsScoped")
+};
+
+// Usage
+auto player = get_player(index);
+if (player->has_defuser()) {
+    console::print<console::log_level::DEBUG>("Player has defuse kit");
+}
+```
+
+### Validating Netvars
+
+```cpp
+bool validate_netvars() {
+    struct netvar_entry {
+        const char* table;
+        const char* var;
+        const char* description;
+    };
+    
+    std::vector<netvar_entry> required_netvars = {
+        {"DT_BasePlayer", "m_iHealth", "Player health"},
+        {"DT_BasePlayer", "m_fFlags", "Player flags"},
+        {"DT_BaseEntity", "m_iTeamNum", "Team number"},
+        {"DT_CSPlayer", "m_bHasDefuser", "Has defuser"},
+    };
+    
+    bool all_valid = true;
+    
+    for (const auto& entry : required_netvars) {
+        auto offset = netvar::get_table(entry.table, entry.var);
+        
+        if (offset == 0) {
+            console::print<console::log_level::FATAL>(
+                "Failed to find netvar: {}.{} ({})",
+                entry.table, entry.var, entry.description
+            );
+            all_valid = false;
+        } else {
+            console::print<console::log_level::DEBUG>(
+                "Found {}.{} at offset {:#x}",
+                entry.table, entry.var, offset
+            );
+        }
+    }
+    
+    return all_valid;
+}
+```
+
+## Advanced Usage
+
+### Caching Netvars
+
+```cpp
+class netvar_cache {
+public:
+    static uintptr_t get(const char* table, const char* var) {
+        auto hash = HASH(table) ^ HASH(var);
+        
+        if (auto it = cache_.find(hash); it != cache_.end())
+            return it->second;
+            
+        auto offset = netvar::get_table(table, var);
+        cache_[hash] = offset;
+        return offset;
+    }
+    
+private:
+    static inline std::unordered_map<uint32_t, uintptr_t> cache_;
+};
+```
+
+## Best Practices
+
+<Tip>
+  Cache netvar offsets using `static` variables to avoid repeated lookups.
+</Tip>
+
+<Tip>
+  Validate critical netvars during initialization to catch issues early.
+</Tip>
+
+<Note>
+  Netvar names are case-sensitive and must match exactly as they appear in the game's data tables.
+</Note>
+
+<Note>
+  Array netvars use bracket notation: "m_vecVelocity[0]" for the first element.
+</Note>
+
+<Tip>
+  Use compile-time hash functions (HASH macro) for string comparisons to improve performance.
+</Tip>

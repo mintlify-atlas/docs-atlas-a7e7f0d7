@@ -1,0 +1,369 @@
+---
+title: "Entity List"
+description: "Entity management and player tracking system"
+---
+
+The entity list utility maintains cached information about players in the game, including dormant player tracking and entity state management.
+
+## Overview
+
+The entity list manager (`g_entity_list`) provides efficient access to player information by caching relevant data each frame. This eliminates redundant entity queries and provides dormancy tracking.
+
+```cpp
+g_entity_list.update(); // Call once per frame
+
+for (int i = 0; i < 65; i++) {
+    auto& info = g_entity_list.players[i];
+    if (!info.m_valid)
+        continue;
+        
+    // Access cached player data
+    console::print<console::log_level::DEBUG>("Player {}: {}", i, info.m_name);
+}
+```
+
+## Data Structures
+
+### player_info
+
+Cached information about each player entity.
+
+```cpp
+struct player_info {
+    std::string m_name;              // Player name
+    math::vec3 m_mins;               // Bounding box mins
+    math::vec3 m_maxs;               // Bounding box maxs
+    math::matrix_3x4 m_rgfl;         // Bone matrix data
+    int m_index;                     // Entity index
+    bool m_valid;                    // Is this entry valid?
+    sdk::c_base_combat_weapon* m_weapon; // Active weapon
+    dormant_info m_dormant_info;     // Dormancy tracking
+};
+```
+
+#### Fields
+
+<ParamField path="m_name" type="std::string">
+  The player's display name
+</ParamField>
+
+<ParamField path="m_mins" type="math::vec3">
+  Minimum bounds of the player's collision box
+</ParamField>
+
+<ParamField path="m_maxs" type="math::vec3">
+  Maximum bounds of the player's collision box
+</ParamField>
+
+<ParamField path="m_rgfl" type="math::matrix_3x4">
+  Bone matrix data for animations
+</ParamField>
+
+<ParamField path="m_index" type="int">
+  The entity index (1-64 for players)
+</ParamField>
+
+<ParamField path="m_valid" type="bool">
+  True if this player is valid, alive, and an enemy
+</ParamField>
+
+<ParamField path="m_weapon" type="sdk::c_base_combat_weapon*">
+  Pointer to the player's currently active weapon
+</ParamField>
+
+<ParamField path="m_dormant_info" type="dormant_info">
+  Dormancy tracking information
+</ParamField>
+
+### dormant_info
+
+Tracks position and timing information for dormant players.
+
+```cpp
+struct dormant_info {
+    math::vec3 m_last_position;      // Last known position
+    math::vec3 m_vouchable_position; // Position when last vouched
+    int m_vouchable_tick;            // Tick when position was vouched
+    int m_found_tick;                // Tick when player was last seen
+    bool m_valid;                    // Is dormant data valid?
+};
+```
+
+<Note>
+  Dormant entities are players that are not currently visible to the client but still exist in the game. The Source Engine stops updating their properties to save bandwidth.
+</Note>
+
+#### Fields
+
+<ParamField path="m_last_position" type="math::vec3">
+  The last known position before going dormant
+</ParamField>
+
+<ParamField path="m_vouchable_position" type="math::vec3">
+  A reliable position that can be used for predictions
+</ParamField>
+
+<ParamField path="m_vouchable_tick" type="int">
+  Server tick when vouchable position was recorded
+</ParamField>
+
+<ParamField path="m_found_tick" type="int">
+  Server tick when player was last found (not dormant)
+</ParamField>
+
+<ParamField path="m_valid" type="bool">
+  True if dormant data is recent enough to be useful (within 3 seconds)
+</ParamField>
+
+## Entity List Manager
+
+### impl
+
+The main entity list implementation.
+
+```cpp
+struct impl {
+    std::array<player_info, 65> players;
+    void update();
+};
+```
+
+### update
+
+Update the entity list cache. Call this once per frame.
+
+```cpp
+void update()
+```
+
+```cpp
+// In your CreateMove or PaintTraverse hook
+g_entity_list.update();
+```
+
+<Tip>
+  Call `update()` at the beginning of your main game loop to ensure all cached data is current.
+</Tip>
+
+#### Update Process
+
+1. Updates `g_ctx.local` with the local player entity
+2. Updates `g_ctx.weapon` with the active weapon
+3. Iterates through all 64 player slots
+4. Validates each player (alive, not local, is enemy)
+5. Caches player name, index, position, and weapon
+6. Updates dormancy tracking information
+
+## Accessing the Entity List
+
+### Global Instance
+
+```cpp
+extern entity_list::impl g_entity_list;
+```
+
+### Iterating Players
+
+```cpp
+for (int i = 1; i < 65; i++) {
+    const auto& player_info = g_entity_list.players[i];
+    
+    if (!player_info.m_valid)
+        continue;
+        
+    // Player is valid, alive, and an enemy
+    process_player(i, player_info);
+}
+```
+
+## Common Patterns
+
+### Finding Nearest Enemy
+
+```cpp
+sdk::c_cs_player* find_nearest_enemy() {
+    if (!g_ctx.local)
+        return nullptr;
+        
+    auto localPos = g_ctx.local->get_abs_origin();
+    float closestDist = FLT_MAX;
+    int closestIndex = -1;
+    
+    for (int i = 1; i < 65; i++) {
+        const auto& info = g_entity_list.players[i];
+        if (!info.m_valid)
+            continue;
+            
+        auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(i);
+        if (!player)
+            continue;
+            
+        float dist = localPos.dist_to_sqr(player->get_abs_origin());
+        if (dist < closestDist) {
+            closestDist = dist;
+            closestIndex = i;
+        }
+    }
+    
+    if (closestIndex != -1)
+        return g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(closestIndex);
+        
+    return nullptr;
+}
+```
+
+### Checking Player Weapons
+
+```cpp
+void check_enemy_weapons() {
+    for (int i = 1; i < 65; i++) {
+        const auto& info = g_entity_list.players[i];
+        if (!info.m_valid || !info.m_weapon)
+            continue;
+            
+        auto weaponId = info.m_weapon->item_definition_index();
+        
+        if (weaponId == WEAPON_AWP) {
+            console::print<console::log_level::WARNING>(
+                "Player {} has AWP!", info.m_name
+            );
+        }
+    }
+}
+```
+
+### Dormant Player ESP
+
+```cpp
+void draw_dormant_esp() {
+    for (int i = 1; i < 65; i++) {
+        const auto& info = g_entity_list.players[i];
+        
+        // Check if player has valid dormant data
+        if (!info.m_dormant_info.m_valid)
+            continue;
+            
+        math::vec3 screenPos;
+        if (!math::world_to_screen(info.m_dormant_info.m_last_position, screenPos))
+            continue;
+            
+        // Draw dormant indicator
+        g_render.render_text(
+            screenPos.x, screenPos.y,
+            AL_HORIZONTAL_CENTER,
+            FLAG_OUTLINE,
+            "DORMANT",
+            g_fonts[HASH("Verdana")],
+            color(255, 165, 0, 200) // Orange
+        );
+        
+        // Calculate how old the data is
+        float timeSinceSeen = sdk::ticks_to_time(
+            g_interfaces.globals->tick_count - info.m_dormant_info.m_found_tick
+        );
+        
+        g_render.render_text(
+            screenPos.x, screenPos.y + 15,
+            AL_HORIZONTAL_CENTER,
+            FLAG_NONE,
+            console::format("{:.1f}s ago", timeSinceSeen).c_str(),
+            g_fonts[HASH("Verdana")],
+            color::white()
+        );
+    }
+}
+```
+
+### Entity Validation
+
+```cpp
+bool is_valid_target(int index) {
+    if (index < 1 || index > 64)
+        return false;
+        
+    const auto& info = g_entity_list.players[index];
+    if (!info.m_valid)
+        return false;
+        
+    auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(index);
+    if (!player || !player->is_alive())
+        return false;
+        
+    // Additional checks
+    if (player->has_immunity())
+        return false;
+        
+    return true;
+}
+```
+
+### Counting Valid Enemies
+
+```cpp
+int get_enemy_count() {
+    int count = 0;
+    
+    for (int i = 1; i < 65; i++) {
+        if (g_entity_list.players[i].m_valid)
+            count++;
+    }
+    
+    return count;
+}
+```
+
+### Player Tracking Over Time
+
+```cpp
+void track_player_movement(int index) {
+    static std::unordered_map<int, std::vector<math::vec3>> trails;
+    
+    const auto& info = g_entity_list.players[index];
+    if (!info.m_valid)
+        return;
+        
+    auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(index);
+    if (!player)
+        return;
+        
+    // Add current position to trail
+    trails[index].push_back(player->get_abs_origin());
+    
+    // Keep only last 50 positions
+    if (trails[index].size() > 50)
+        trails[index].erase(trails[index].begin());
+        
+    // Draw trail
+    for (size_t i = 1; i < trails[index].size(); i++) {
+        math::vec3 screen1, screen2;
+        if (math::world_to_screen(trails[index][i-1], screen1) &&
+            math::world_to_screen(trails[index][i], screen2)) {
+            
+            float alpha = (float)i / trails[index].size() * 255.0f;
+            g_render.render_line(
+                screen1.x, screen1.y,
+                screen2.x, screen2.y,
+                color(255, 255, 255, (int)alpha)
+            );
+        }
+    }
+}
+```
+
+## Best Practices
+
+<Tip>
+  Always call `g_entity_list.update()` at the start of your frame processing to ensure cached data is current.
+</Tip>
+
+<Tip>
+  Check `m_valid` before accessing player data to avoid processing invalid entries.
+</Tip>
+
+<Note>
+  Dormant players are kept in the list for up to 3 seconds. Use `m_dormant_info.m_valid` to check if dormant data is recent.
+</Note>
+
+<Note>
+  The entity list only tracks enemy players. Teammates are filtered out during the update process.
+</Note>

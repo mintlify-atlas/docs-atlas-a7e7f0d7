@@ -1,0 +1,165 @@
+---
+title: "CreateMove Hook"
+description: "Hook into player input processing to modify movement and aim commands"
+---
+
+## Overview
+
+The `create_move` hook is called every time the game processes player input, allowing you to modify user commands before they're sent to the server. This is one of the most important hooks for implementing features like aimbot, movement enhancements, and anti-aim.
+
+<Note>
+  This hook is called at virtual table index 22 of the `i_client_dll` interface.
+</Note>
+
+## Hook Signature
+
+```cpp
+void __fastcall create_move_detour(
+    sdk::i_client_dll* _this,
+    void* edx,
+    int sequence_number,
+    float input_sample_frametime,
+    bool active
+)
+```
+
+### Parameters
+
+<ParamField path="_this" type="sdk::i_client_dll*">
+  Pointer to the client DLL interface instance
+</ParamField>
+
+<ParamField path="edx" type="void*">
+  EDX register (fastcall convention) - not used
+</ParamField>
+
+<ParamField path="sequence_number" type="int">
+  The command sequence number used to retrieve the user command
+</ParamField>
+
+<ParamField path="input_sample_frametime" type="float">
+  The time delta for this input sample
+</ParamField>
+
+<ParamField path="active" type="bool">
+  Whether the client is currently active
+</ParamField>
+
+## When It's Called
+
+This hook is invoked every frame when the game needs to process player input. It occurs before the command is sent to the server, giving you the opportunity to:
+
+- Modify view angles (aim)
+- Change movement buttons and velocities
+- Alter firing state
+- Implement prediction
+- Control packet sending behavior
+
+## Common Use Cases
+
+### Aimbot Implementation
+
+The hook retrieves the user command and runs aimbot logic before finalizing the command:
+
+```cpp
+auto command = g_interfaces.input->get_user_cmd(sequence_number);
+g_aimbot.run();
+```
+
+### Movement Fixes
+
+After modifying view angles, movement needs to be corrected to maintain intended direction:
+
+```cpp
+g_movement.movement_fix(command, g_prediction.backup_vars.view_angles);
+```
+
+### Prediction System
+
+The hook runs prediction to accurately simulate player state:
+
+```cpp
+g_prediction.update();
+g_prediction.store_backup();
+g_prediction.start(g_ctx.local);
+g_prediction.end(g_ctx.local);
+```
+
+<Warning>
+  You must verify the command checksum after modifications to prevent detection:
+  ```cpp
+  verified->command = *command;
+  verified->checksum = command->checksum();
+  ```
+</Warning>
+
+## Implementation Details
+
+The hook uses naked function assembly to preserve registers and properly handle the `send_packet` boolean:
+
+<CodeGroup>
+```cpp create_move.h
+CREATE_HOOK_HELPER(create_move_hook, 
+    __declspec(naked) void(__fastcall)(
+        sdk::i_client_dll*, void*, int, float, bool
+    )
+);
+
+static void __fastcall create_move_detour(
+    sdk::i_client_dll* _this, 
+    void* edx, 
+    int sequence_number,
+    float input_sample_frametime,
+    bool active
+);
+```
+
+```cpp create_move.cpp
+__declspec(naked) void __fastcall hooks::create_move::create_move_detour(
+    sdk::i_client_dll* _this, 
+    void* edx, 
+    int sequence_number,
+    float input_sample_frametime, 
+    bool active
+)
+{
+    __asm
+    {
+        push ebp
+        mov  ebp, esp
+        push ebx
+        push esp
+        push dword ptr[active]
+        push dword ptr[input_sample_frametime]
+        push dword ptr[sequence_number]
+        call create_move_function
+        pop  ebx
+        pop  ebp
+        retn 0Ch
+    }
+}
+```
+</CodeGroup>
+
+## Source Files
+
+- Header: `globals/hooks/create_move/create_move.h:18-31`
+- Implementation: `globals/hooks/create_move/create_move.cpp:15-64`
+
+## Initialization
+
+```cpp
+void init()
+{
+    hooks::create_move_hook.create(
+        virtual_func::get(g_interfaces.client, 22),
+        create_move_detour,
+        _("create_move_detour")
+    );
+}
+```
+
+## See Also
+
+- [Frame Stage Notify](/api/hooks/frame-stage-notify) - For handling different game frame stages
+- [Paint Traverse](/api/hooks/paint-traverse) - For rendering overlays

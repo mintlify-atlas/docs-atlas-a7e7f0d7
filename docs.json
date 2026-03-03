@@ -1,122 +1,98 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "HotWheels SDK",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#E74C3C",
+    "light": "#EC7063",
+    "dark": "#C0392B"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/yuriassaf1337/hw-sdk"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/yuriassaf1337/hw-sdk"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/architecture",
+              "concepts/hooking",
+              "concepts/memory"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Features",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "features/aimbot",
+              "features/visuals",
+              "features/movement",
+              "features/lagcomp",
+              "features/indicators"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Utilities",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "utilities/math",
+              "utilities/renderer",
+              "utilities/console",
+              "utilities/entity-list",
+              "utilities/netvars"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Game SDK",
             "pages": [
-              "api-reference/introduction"
+              "api/game/entities",
+              "api/game/weapons",
+              "api/game/players",
+              "api/game/interfaces"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Utilities",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/utils/math",
+              "api/utils/renderer",
+              "api/utils/detour",
+              "api/utils/modules"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/hooks/create-move",
+              "api/hooks/frame-stage-notify",
+              "api/hooks/paint-traverse",
+              "api/hooks/draw-model-execute"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

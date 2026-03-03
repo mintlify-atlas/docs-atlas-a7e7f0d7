@@ -1,0 +1,237 @@
+---
+title: "FrameStageNotify Hook"
+description: "Hook into different stages of the game's frame processing cycle"
+---
+
+## Overview
+
+The `frame_stage_notify` hook is called at various stages during each game frame, allowing you to execute code at specific points in the engine's update cycle. This is essential for tasks like updating entity lists, managing animations, and handling network updates.
+
+<Note>
+  This hook is called at virtual table index 37 of the `i_client_dll` interface.
+</Note>
+
+## Hook Signature
+
+```cpp
+void __fastcall frame_stage_notify_detour(
+    void* ecx,
+    void* edx,
+    sdk::frame_stage stage
+)
+```
+
+### Parameters
+
+<ParamField path="ecx" type="void*">
+  ECX register (fastcall convention) - pointer to the interface
+</ParamField>
+
+<ParamField path="edx" type="void*">
+  EDX register (fastcall convention) - not used
+</ParamField>
+
+<ParamField path="stage" type="sdk::frame_stage">
+  The current frame stage being processed
+</ParamField>
+
+## Frame Stages
+
+The `frame_stage` enum defines different points in the frame processing cycle:
+
+```cpp
+enum class frame_stage : int
+{
+    UNDEFINED = -1,
+    START,
+    NET_UPDATE_START,
+    NET_UPDATE_POSTDATAUPDATE_START,
+    NET_UPDATE_POSTDATAUPDATE_END,
+    NET_UPDATE_END,
+    RENDER_START,
+    RENDER_END
+};
+```
+
+### Stage Descriptions
+
+<ParamField path="UNDEFINED" type="-1">
+  Invalid or uninitialized stage
+</ParamField>
+
+<ParamField path="START" type="0">
+  Beginning of the frame
+</ParamField>
+
+<ParamField path="NET_UPDATE_START" type="1">
+  Network update cycle begins
+</ParamField>
+
+<ParamField path="NET_UPDATE_POSTDATAUPDATE_START" type="2">
+  Post-data update phase starts
+</ParamField>
+
+<ParamField path="NET_UPDATE_POSTDATAUPDATE_END" type="3">
+  Post-data update phase ends
+</ParamField>
+
+<ParamField path="NET_UPDATE_END" type="4">
+  Network update cycle completes - **most commonly used**
+</ParamField>
+
+<ParamField path="RENDER_START" type="5">
+  Rendering phase begins
+</ParamField>
+
+<ParamField path="RENDER_END" type="6">
+  Rendering phase completes
+</ParamField>
+
+## When It's Called
+
+This hook is invoked multiple times per frame at different stages. The most commonly used stage is `NET_UPDATE_END`, which occurs after all network data has been processed but before rendering.
+
+## Common Use Cases
+
+### Entity List Updates
+
+Update cached entity information after network data arrives:
+
+```cpp
+case NET_UPDATE_END:
+    g_entity_list.update();
+    break;
+```
+
+### Event Processing
+
+Fire game events immediately without delay:
+
+```cpp
+for (auto event = g_interfaces.client_state->events; event; event = event->next)
+    event->fire_delay = 0.f;
+
+g_interfaces.engine->fire_events();
+```
+
+### Animation Updates
+
+Update client-side animations for enemy players:
+
+```cpp
+for (auto& player_info : g_entity_list.players) {
+    auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(
+        player_info.m_index
+    );
+    
+    if (!player_info.m_valid || !player || !player->is_enemy(g_ctx.local))
+        continue;
+    
+    g_ctx.updating_animations = true;
+    // Update animations
+}
+```
+
+### Disabling Interpolation
+
+Disable interpolation for more accurate entity positions:
+
+```cpp
+auto var_mapping = player->get_var_map();
+
+for (int iterator = 0; iterator < var_mapping->interpolated_entries; iterator++)
+    var_mapping->entries[iterator].needs_to_interpolate = false;
+```
+
+### Sound ESP
+
+Track player positions based on sound emissions:
+
+```cpp
+sdk::datatypes::c_utl_vector<sdk::sound_info> sounds{};
+g_interfaces.engine_sound->get_active_sounds(sounds);
+
+for (int iterator = 0; iterator < sounds.count(); iterator++) {
+    auto& info = sounds[iterator];
+    auto player = g_interfaces.entity_list->get_client_entity<sdk::c_cs_player*>(
+        info.sound_source
+    );
+    
+    // Trace sound to ground and store position
+    sdk::ray_t ray;
+    sdk::c_game_trace trace;
+    ray.init(sound_origin, sound_floor);
+    g_interfaces.engine_trace->trace_ray(ray, sdk::masks::MASK_ALL, &filter, &trace);
+    
+    g_entity_list.players[player->entity_index()].m_dormant_info.m_last_position = 
+        trace.end_pos;
+}
+```
+
+<Warning>
+  Always call the original function to ensure the game continues to process frames correctly:
+  ```cpp
+  hooks::frame_stage_notify_hook.call_original<void>(ecx, edx, stage);
+  ```
+</Warning>
+
+## Implementation Example
+
+<CodeGroup>
+```cpp frame_stage_notify.h
+CREATE_HOOK_HELPER(
+    frame_stage_notify_hook,
+    void(__fastcall)(void*, void*, sdk::frame_stage)
+);
+
+static void __fastcall frame_stage_notify_detour(
+    void* ecx,
+    void* edx,
+    sdk::frame_stage stage
+);
+```
+
+```cpp frame_stage_notify.cpp
+void __fastcall hooks::frame_stage_notify::frame_stage_notify_detour(
+    void* ecx,
+    void* edx,
+    sdk::frame_stage stage
+)
+{
+    hooks::frame_stage_notify_hook.call_original<void>(ecx, edx, stage);
+    
+    switch (stage) {
+        using enum sdk::frame_stage;
+    case NET_UPDATE_END:
+        g_entity_list.update();
+        g_lagcomp.update();
+        // ... additional processing
+        break;
+    }
+}
+```
+</CodeGroup>
+
+## Source Files
+
+- Header: `globals/hooks/frame_stage_notify/frame_stage_notify.h:21-34`
+- Implementation: `globals/hooks/frame_stage_notify/frame_stage_notify.cpp:3-77`
+- Enum: `game/sdk/enums/frame_stage.h:5-16`
+
+## Initialization
+
+```cpp
+void init()
+{
+    hooks::frame_stage_notify_hook.create(
+        virtual_func::get(g_interfaces.client, 37),
+        frame_stage_notify_detour,
+        _("frame_stage_notify_detour")
+    );
+}
+```
+
+## See Also
+
+- [Create Move](/api/hooks/create-move) - For modifying player input
+- [Paint Traverse](/api/hooks/paint-traverse) - For rendering after frame processing

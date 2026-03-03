@@ -1,0 +1,558 @@
+---
+title: "Hooking System"
+description: "Learn how to intercept and modify game functions using VMT and detour hooking"
+---
+
+## Overview
+
+The HotWheels SDK provides two primary hooking mechanisms for intercepting game functions:
+
+<CardGroup cols={2}>
+  <Card title="VMT Hooking" icon="table">
+    Virtual Method Table hooking for class methods
+  </Card>
+  <Card title="Detour Hooking" icon="route">
+    MinHook-based detours for any function
+  </Card>
+</CardGroup>
+
+## Virtual Function Hooking
+
+### What is VMT Hooking?
+
+VMT (Virtual Method Table) hooking exploits C++ polymorphism by intercepting virtual function calls. Every class with virtual methods has a vtable containing function pointers.
+
+### Getting Virtual Functions
+
+The SDK provides utilities to retrieve virtual function pointers:
+
+```cpp
+namespace virtual_func
+{
+    template<typename T, typename... VA>
+    constexpr T call(void* thisptr, std::size_t index, VA... args)
+    {
+        using fn = T(__thiscall*)(void*, decltype(args)...);
+        return (*static_cast<fn**>(thisptr))[index](thisptr, args...);
+    }
+    
+    template<typename T = void*>
+    constexpr T get(void* thisptr, std::size_t index)
+    {
+        return (*static_cast<T**>(thisptr))[index];
+    }
+}
+```
+
+Source: `utils/vfunc/vfunc.h:4-18`
+
+### Usage Example
+
+<CodeGroup>
+```cpp Calling Virtual Functions
+// Call a virtual function directly
+auto result = virtual_func::call<bool>(instance, 24, param1, param2);
+
+// Get a virtual function pointer
+auto fn_ptr = virtual_func::get(g_interfaces.client, 24);
+```
+
+```cpp Getting Function for Hooking
+// Get the CreateMove virtual function (index 24)
+auto create_move_fn = virtual_func::get(g_interfaces.client, 24);
+
+// Hook it with detour system
+hooks::create_move.create(create_move_fn, hooks::detours::create_move);
+```
+</CodeGroup>
+
+<Note>
+Virtual function indices are specific to each game version and may change with updates. Always verify indices when updating.
+</Note>
+
+## Detour Hooking with MinHook
+
+### Detour Hook Class
+
+The SDK wraps MinHook functionality in a convenient class:
+
+```cpp
+namespace detour
+{
+    class hook
+    {
+    public:
+        hook() = default;
+        explicit hook(void* func, void* detour) 
+            : m_base_fn(func), m_replace_fn(detour) {};
+        
+        bool create(void* func, void* detour);
+        bool replace();
+        bool remove();
+        bool restore();
+        
+        inline bool is_hooked() const;
+        
+        template<typename T>
+        T get_original()
+        {
+            return static_cast<T>(m_original_fn);
+        }
+        
+    private:
+        bool m_hooked = false;
+        void* m_base_fn = nullptr;
+        void* m_replace_fn = nullptr;
+        void* m_original_fn = nullptr;
+    };
+}
+```
+
+Source: `utils/detour/detour.h:5-36`
+
+### Creating Detours
+
+The detour system follows this workflow:
+
+<Steps>
+  <Step title="Initialize MinHook">
+    Call `MH_Initialize()` once at startup:
+    
+    ```cpp
+    if (const auto status = MH_Initialize(); status != MH_OK) {
+        console::print<console::log_level::FATAL>(
+            _("Failed to initialize MinHook [ status: {} ]"),
+            MH_StatusToString(status)
+        );
+        return false;
+    }
+    ```
+  </Step>
+  
+  <Step title="Create Hook">
+    Use the `create()` method to set up the hook:
+    
+    ```cpp
+    bool detour::hook::create(void* func, void* detour)
+    {
+        m_base_fn = func;
+        if (!m_base_fn)
+            return false;
+            
+        m_replace_fn = detour;
+        if (!m_replace_fn)
+            return false;
+            
+        if (const auto status = MH_CreateHook(m_base_fn, m_replace_fn, &m_original_fn); 
+            status != MH_OK) {
+            console::print<console::log_level::FATAL>(
+                _("detour::hook::create() failed [ status: {} | base: {:#08X} ]"),
+                MH_StatusToString(status),
+                reinterpret_cast<std::uintptr_t>(m_base_fn)
+            );
+            return false;
+        }
+        
+        return replace();
+    }
+    ```
+    
+    Source: `utils/detour/detour.cpp:5-41`
+  </Step>
+  
+  <Step title="Enable Hook">
+    The `replace()` method activates the hook:
+    
+    ```cpp
+    bool detour::hook::replace()
+    {
+        if (!m_base_fn || m_hooked)
+            return false;
+            
+        if (const auto status = MH_EnableHook(m_base_fn); status != MH_OK) {
+            console::print<console::log_level::FATAL>(
+                _("detour::hook::replace() failed [ status: {} ]"),
+                MH_StatusToString(status)
+            );
+            return false;
+        }
+        
+        m_hooked = true;
+        return true;
+    }
+    ```
+    
+    Source: `utils/detour/detour.cpp:43-61`
+  </Step>
+</Steps>
+
+### Calling Original Functions
+
+Always call the original function from your detour:
+
+```cpp
+bool __fastcall hooks::detours::create_move(
+    sdk::c_cs_player* ecx, 
+    void*, 
+    float input_sample_time, 
+    sdk::c_user_cmd* cmd
+)
+{
+    // Get original function
+    static auto og = hooks::create_move.get_original<hooks::create_move_fn>();
+    
+    // Validate parameters
+    if (!cmd || !cmd->command_number)
+        return og(ecx, input_sample_time, cmd);
+    
+    // Store in context
+    g_ctx.cmd = cmd;
+    
+    // Call original
+    if (og(ecx, input_sample_time, cmd))
+        ecx->set_local_view_angles(cmd->view_angles);
+    
+    // Custom logic
+    g_aimbot.run();
+    g_movement.movement_fix(cmd, g_prediction.backup_vars.view_angles);
+    
+    return false;
+}
+```
+
+Source: `hooks/hooks.cpp:46-82`
+
+<Warning>
+Always store the original function in a `static` variable to avoid repeatedly calling `get_original()`, which can impact performance.
+</Warning>
+
+## Hook Helper Template
+
+For convenience, the SDK includes a template-based hook helper:
+
+```cpp
+template<class T>
+class hook_helper
+{
+private:
+    void* source;
+    void* original;
+    
+public:
+    template<typename S, typename D>
+    void create(S source, D destination, const char* name = _("undefined"))
+    {
+        if (MH_CreateHook(
+            reinterpret_cast<void*>(source),
+            reinterpret_cast<void*>(destination),
+            &original
+        ) != MH_OK)
+            console::print<console::log_level::FATAL>(
+                _("Failed to create hook {} - [ {} -> {} ]"),
+                name,
+                reinterpret_cast<void*>(source),
+                reinterpret_cast<void*>(destination)
+            );
+            
+        if (MH_EnableHook(reinterpret_cast<void*>(source)) != MH_OK)
+            console::print<console::log_level::FATAL>(
+                _("Failed to enable hook {}"),
+                name
+            );
+            
+        this->source = source;
+        
+        console::print<console::log_level::NORMAL>(
+            _("Hooked {} - [ {} -> {} ]"),
+            name,
+            reinterpret_cast<void*>(source),
+            reinterpret_cast<void*>(destination)
+        );
+    }
+    
+    T* get_original()
+    {
+        return reinterpret_cast<T*>(original);
+    }
+};
+```
+
+Source: `globals/hooks/hooking.h:7-50`
+
+## Common Hook Examples
+
+<Tabs>
+  <Tab title="CreateMove">
+    The most important hook for input manipulation:
+    
+    ```cpp
+    namespace hooks
+    {
+        inline detour::hook create_move;
+        using create_move_fn = bool(__thiscall*)(
+            sdk::c_cs_player*, 
+            float, 
+            sdk::c_user_cmd*
+        );
+    }
+    
+    // Installation
+    HOOK(hooks::create_move.create(
+        virtual_func::get(g_interfaces.client, 24),
+        hooks::detours::create_move
+    ));
+    ```
+    
+    Source: `hooks/hooks.inl:7-11` and `hooks/hooks.cpp:22`
+  </Tab>
+  
+  <Tab title="SendNetMsg">
+    Hook for intercepting network messages:
+    
+    ```cpp
+    bool __fastcall hooks::detours::send_net_msg(
+        void* ecx,
+        void* edx,
+        sdk::i_net_msg* net_message,
+        bool reliable,
+        bool voice
+    )
+    {
+        static auto og = hooks::send_net_msg.get_original<
+            decltype(&hooks::detours::send_net_msg)
+        >();
+        
+        // CRC check bypass
+        if (net_message->get_type() == 14)
+            return false;
+            
+        // Fix for fakelag voice lag
+        if (net_message->get_group() == sdk::net_channel_type::VOICE)
+            voice = true;
+            
+        return og(ecx, edx, net_message, reliable, voice);
+    }
+    ```
+    
+    Source: `hooks/hooks.cpp:105-118`
+  </Tab>
+  
+  <Tab title="WndProc">
+    Window procedure hook for input handling:
+    
+    ```cpp
+    namespace hooks
+    {
+        inline WNDPROC wnd_proc;
+    }
+    
+    // Installation
+    if (hooks::wnd_proc = reinterpret_cast<WNDPROC>(
+        LI_FN(SetWindowLongA)(
+            FindWindowA(_("Valve001"), nullptr),
+            GWL_WNDPROC,
+            reinterpret_cast<LONG_PTR>(hooks::detours::wnd_proc)
+        )
+    ); !hooks::wnd_proc) {
+        console::print<console::log_level::SUCCESS>(
+            _("Failed find game window")
+        );
+        return false;
+    }
+    ```
+    
+    Source: `hooks/hooks.cpp:13-18`
+  </Tab>
+  
+  <Tab title="Return Address">
+    Pattern-scanned hooks for anti-detection:
+    
+    ```cpp
+    namespace ret_add
+    {
+        inline detour::hook return_address_hook_client;
+        inline detour::hook return_address_hook_engine;
+        inline detour::hook return_address_hook_studio;
+        inline detour::hook return_address_hook_material;
+        
+        static bool init()
+        {
+            HOOK(hooks::ret_add::return_address_hook_client.create(
+                g_client_dll.pattern_scan(_("55 8B EC 56 8B F1 33 C0 57")).as<void*>(),
+                &hooks::detours::ret_add
+            ));
+            
+            HOOK(hooks::ret_add::return_address_hook_engine.create(
+                g_engine_dll.pattern_scan(_("55 8B EC 56 8B F1 33 C0 57")).as<void*>(),
+                &hooks::detours::ret_add
+            ));
+            
+            return true;
+        }
+    }
+    ```
+    
+    Source: `hooks/hooks.inl:25-48`
+  </Tab>
+</Tabs>
+
+## Hook Management
+
+### Global Hook Declarations
+
+Declare hooks in the `hooks` namespace:
+
+```cpp
+namespace hooks
+{
+    inline WNDPROC wnd_proc;
+    
+    // Detour hooks
+    inline detour::hook create_move;
+    inline detour::hook send_net_msg;
+    
+    // Function signatures
+    using create_move_fn = bool(__thiscall*)(
+        sdk::c_cs_player*,
+        float,
+        sdk::c_user_cmd*
+    );
+}
+```
+
+Source: `hooks/hooks.inl:2-12`
+
+### Cleanup and Unloading
+
+Properly cleanup hooks on unload:
+
+```cpp
+void hooks::impl::unload()
+{
+    MOCKING_TRY;
+    
+    // Disable and remove all hooks
+    MH_DisableHook(MH_ALL_HOOKS);
+    MH_RemoveHook(MH_ALL_HOOKS);
+    
+    // Uninitialize MinHook
+    MH_Uninitialize();
+    
+    // Restore WndProc
+    LI_FN(SetWindowLongA)(
+        hotwheels::window,
+        GWL_WNDPROC,
+        reinterpret_cast<LONG_PTR>(hooks::wnd_proc)
+    );
+    
+    MOCKING_CATCH();
+}
+```
+
+Source: `hooks/hooks.cpp:30-44`
+
+<Warning>
+Always restore hooks and cleanup MinHook before unloading the DLL to prevent crashes.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Function Signatures">
+    Always define type-safe function signatures:
+    
+    ```cpp
+    // Good - type safe
+    using create_move_fn = bool(__thiscall*)(
+        sdk::c_cs_player*,
+        float,
+        sdk::c_user_cmd*
+    );
+    auto og = hook.get_original<create_move_fn>();
+    
+    // Bad - error prone
+    auto og = (void*)hook.get_original();
+    ```
+  </Accordion>
+  
+  <Accordion title="Static Originals">
+    Cache original function pointers in static variables:
+    
+    ```cpp
+    bool __fastcall hooked_function()
+    {
+        // Good - called once
+        static auto og = hook.get_original<fn_type>();
+        
+        // Bad - called every time
+        auto og = hook.get_original<fn_type>();
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    Always check hook creation status:
+    
+    ```cpp
+    if (!hooks::create_move.create(target, detour)) {
+        console::print<console::log_level::FATAL>(
+            "Failed to create hook"
+        );
+        return false;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Calling Conventions">
+    Match calling conventions exactly:
+    
+    - `__thiscall` for member functions
+    - `__stdcall` for WinAPI functions
+    - `__fastcall` for optimized functions
+    - `__cdecl` for C-style functions
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<Tabs>
+  <Tab title="Crashes">
+    **Symptoms:** Immediate crash when hook is called
+    
+    **Solutions:**
+    - Verify function signature matches exactly
+    - Check calling convention (__thiscall, __stdcall, etc.)
+    - Ensure original function is being called
+    - Validate all parameters before use
+  </Tab>
+  
+  <Tab title="Hook Not Called">
+    **Symptoms:** Hook is installed but never executes
+    
+    **Solutions:**
+    - Verify virtual function index is correct
+    - Check that hook was enabled with `replace()`
+    - Ensure target function is actually being called by game
+    - Verify pattern scan found correct address
+  </Tab>
+  
+  <Tab title="Return Value Issues">
+    **Symptoms:** Game behaves unexpectedly after hook
+    
+    **Solutions:**
+    - Return the correct value from your detour
+    - Call original function when needed
+    - Don't modify parameters that shouldn't be changed
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Memory" icon="memory" href="/concepts/memory">
+    Learn about pattern scanning and netvars
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand the overall SDK structure
+  </Card>
+</CardGroup>

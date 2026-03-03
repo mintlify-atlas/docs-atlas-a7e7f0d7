@@ -1,0 +1,305 @@
+---
+title: "Indicators"
+description: "On-screen indicators for velocity, stamina, and keybinds"
+---
+
+The HotWheels SDK indicators system provides real-time on-screen information display for movement tracking and feature status.
+
+## Overview
+
+The indicators module (`hacks/features/indicators/`) implements:
+
+- Velocity indicator with takeoff speed
+- Color-coded velocity changes
+- Optional fade effect based on speed
+- Stamina indicator
+- Keybind display
+
+## Architecture
+
+The indicators system maintains state for each indicator type:
+
+```cpp
+struct impl {
+    struct {
+        int last_vel = 0;
+        int tick_prev = 0;
+        int take_off = 0;
+        float take_off_time = 0.f;
+        bool last_on_ground = false;
+    } m_velocity_info;
+
+    struct {
+        int offset = 0;
+    } m_keybind_info;
+
+    void reset_data( );
+    void render( );
+    void velocity( );
+    void stamina( );
+    void keybinds( );
+};
+```
+
+**Source**: `hacks/features/indicators/indicators.h:5-23`
+
+## Velocity Indicator
+
+The velocity indicator shows current speed with color coding and optional takeoff speed:
+
+<Steps>
+  <Step title="Calculate Velocity">
+    Get 2D velocity magnitude and round to integer
+  </Step>
+  
+  <Step title="Track Takeoff">
+    Detect ground-to-air transition and record takeoff speed
+  </Step>
+  
+  <Step title="Apply Color Coding">
+    Green for increasing, red for decreasing, orange for stable
+  </Step>
+  
+  <Step title="Optional Fade">
+    Apply alpha based on speed (0-310 units/sec)
+  </Step>
+  
+  <Step title="Render Text">
+    Display at screen center with current and takeoff speeds
+  </Step>
+</Steps>
+
+### Implementation
+
+```cpp
+void indicators::impl::velocity( )
+{
+    int corrected_velocity = static_cast< int >( ROUND_UP( g_ctx.local->velocity( ).length_2d( ) ) );
+
+    if ( m_velocity_info.last_on_ground && !g_ctx.local->flags( ).has( sdk::flags::ONGROUND ) ) {
+        m_velocity_info.take_off = corrected_velocity;
+        m_velocity_info.take_off_time = g_interfaces.globals->current_time + 2.f;
+    }
+
+    float text_alpha = g_config.find< bool >( HASH( "m_velocity_indicator_fade" ) )
+                           ? g_ctx.local->velocity( ).length_2d( ) >= 310.f ? 310.f : g_ctx.local->velocity( ).length_2d( ) / 310.f
+                           : 1.f;
+
+    color velocity_color = corrected_velocity == m_velocity_info.last_vel  ? color( 255, 199, 89, text_alpha * 255 )
+                           : corrected_velocity < m_velocity_info.last_vel ? color( 255, 119, 119, text_alpha * 255 )
+                                                                           : color( 30, 255, 109, text_alpha * 255 );
+    const bool should_draw_pre =
+        ( !g_ctx.local->flags( ).has( sdk::flags::ONGROUND ) || ( m_velocity_info.take_off_time > g_interfaces.globals->current_time ) );
+
+    const std::string str_pre = std::format( _("{}({})"), corrected_velocity, m_velocity_info.take_off ),
+                      str = std::format( _("{}"), corrected_velocity );
+
+    g_render.render_text( g_ctx.screen_size.x / 2, g_ctx.screen_size.y / 2, font_alignment::AL_HORIZONTAL_CENTER, font_flags::FLAG_DROPSHADOW,
+                          g_config.find< bool >( HASH( "m_velocity_indicator_show_pre" ) ) && should_draw_pre ? str_pre.c_str( ) : str.c_str( ),
+                          g_fonts[ HASH( "indicator_verdana_font" ) ], velocity_color );
+
+    if ( m_velocity_info.tick_prev + 5 < g_interfaces.globals->tick_count ) {
+        m_velocity_info.last_vel = corrected_velocity;
+        m_velocity_info.tick_prev = g_interfaces.globals->tick_count;
+    }
+
+    m_velocity_info.last_on_ground = g_ctx.local->flags( ).has( sdk::flags::ONGROUND );
+}
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:28-60`
+
+## Color Coding
+
+The velocity indicator uses three colors to show speed changes:
+
+```cpp
+color velocity_color = corrected_velocity == m_velocity_info.last_vel  ? color( 255, 199, 89, text_alpha * 255 )  // Orange - No change
+                       : corrected_velocity < m_velocity_info.last_vel ? color( 255, 119, 119, text_alpha * 255 ) // Red - Decreasing
+                                                                       : color( 30, 255, 109, text_alpha * 255 );  // Green - Increasing
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:41-43`
+
+<Note>
+Velocity is sampled every 5 ticks to prevent excessive flickering from tick-to-tick variations.
+</Note>
+
+## Takeoff Speed Tracking
+
+The system tracks when the player leaves the ground:
+
+```cpp
+if ( m_velocity_info.last_on_ground && !g_ctx.local->flags( ).has( sdk::flags::ONGROUND ) ) {
+    m_velocity_info.take_off = corrected_velocity;
+    m_velocity_info.take_off_time = g_interfaces.globals->current_time + 2.f;
+}
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:32-35`
+
+The takeoff speed is displayed for:
+- The entire duration of the jump
+- 2 seconds after landing
+
+```cpp
+const bool should_draw_pre = ( !g_ctx.local->flags( ).has( sdk::flags::ONGROUND ) || 
+                               ( m_velocity_info.take_off_time > g_interfaces.globals->current_time ) );
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:44-45`
+
+## Fade Effect
+
+Optional alpha modulation based on velocity:
+
+```cpp
+float text_alpha = g_config.find< bool >( HASH( "m_velocity_indicator_fade" ) )
+                       ? g_ctx.local->velocity( ).length_2d( ) >= 310.f ? 310.f : g_ctx.local->velocity( ).length_2d( ) / 310.f
+                       : 1.f;
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:37-39`
+
+The fade calculation:
+- Velocity 0: Fully transparent (alpha = 0.0)
+- Velocity 155: Half transparent (alpha = 0.5)
+- Velocity 310+: Fully opaque (alpha = 1.0)
+
+<Warning>
+Fade effect caps at 310 units/sec to prevent over-brightness at high speeds.
+</Warning>
+
+## Display Formatting
+
+The indicator uses C++20 `std::format` for string composition:
+
+```cpp
+const std::string str_pre = std::format( _("{}({})"), corrected_velocity, m_velocity_info.take_off ),
+                  str = std::format( _("{}"), corrected_velocity );
+
+g_render.render_text( g_ctx.screen_size.x / 2, g_ctx.screen_size.y / 2, 
+                      font_alignment::AL_HORIZONTAL_CENTER, 
+                      font_flags::FLAG_DROPSHADOW,
+                      g_config.find< bool >( HASH( "m_velocity_indicator_show_pre" ) ) && should_draw_pre ? str_pre.c_str( ) : str.c_str( ),
+                      g_fonts[ HASH( "indicator_verdana_font" ) ], 
+                      velocity_color );
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:47-52`
+
+### Display Format
+
+- Standard: `285`
+- With takeoff: `285 (290)` - Shows current speed and takeoff speed
+
+## Render Pipeline
+
+The main render function coordinates all indicators:
+
+```cpp
+void indicators::impl::render( )
+{
+    if ( !g_interfaces.engine->is_fully_connected( ) || !g_ctx.local ) {
+        reset_data( );
+        return;
+    }
+
+    if ( g_config.find< bool >( HASH( "m_velocity_indicator" ) ) )
+        g_indicators.velocity( );
+
+    if ( g_config.find< bool >( HASH( "m_stamina_indicator" ) ) )
+        g_indicators.stamina( );
+}
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:14-26`
+
+<Note>
+Indicators automatically reset when disconnected or dead to prevent stale data.
+</Note>
+
+## State Management
+
+The reset function clears all indicator state:
+
+```cpp
+void indicators::impl::reset_data( )
+{
+    m_velocity_info.last_vel = 0;
+    m_velocity_info.tick_prev = 0;
+    m_velocity_info.take_off = 0;
+    m_velocity_info.take_off_time = 0.f;
+    m_velocity_info.last_on_ground = false;
+}
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:5-12`
+
+## Stamina Indicator
+
+Placeholder for stamina tracking:
+
+```cpp
+void indicators::impl::stamina( ) { }
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:62`
+
+<Note>
+Stamina and keybinds indicators are not yet implemented.
+</Note>
+
+## Keybinds Display
+
+Placeholder for active keybinds:
+
+```cpp
+void indicators::impl::keybinds( ) { }
+```
+
+**Source**: `hacks/features/indicators/indicators.cpp:64`
+
+## Configuration Options
+
+The indicators system supports several config options:
+
+- `m_velocity_indicator` - Enable/disable velocity display
+- `m_velocity_indicator_fade` - Enable fade based on speed
+- `m_velocity_indicator_show_pre` - Show takeoff speed in parentheses
+- `m_stamina_indicator` - Enable/disable stamina display
+
+## API Reference
+
+### `render()`
+
+Main render function for all indicators. Call every frame.
+
+### `velocity()`
+
+Renders the velocity indicator.
+
+### `stamina()`
+
+Placeholder for stamina indicator.
+
+### `keybinds()`
+
+Placeholder for keybind display.
+
+### `reset_data()`
+
+Resets all indicator state. Called on disconnect/death.
+
+## Usage Example
+
+```cpp
+// In your render callback
+if ( g_ctx.local && g_ctx.local->is_alive( ) ) {
+    g_indicators.render( );
+}
+```
+
+<Warning>
+The velocity indicator renders at screen center by default. Ensure this doesn't overlap with other UI elements.
+</Warning>

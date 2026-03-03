@@ -1,0 +1,406 @@
+---
+title: "Math Utilities"
+description: "Mathematical functions and utilities for game calculations, vector operations, and transformations"
+---
+
+# Math Utilities
+
+The `math` namespace provides essential mathematical functions for game development, including angle calculations, vector transformations, world-to-screen projection, and various utility functions.
+
+## Constants
+
+<ResponseField name="math::util::pi" type="constexpr long double">
+  Pi constant with long double precision
+</ResponseField>
+
+<ResponseField name="math::util::pi_f" type="constexpr float">
+  Pi constant as float for performance-critical calculations
+</ResponseField>
+
+## Angle and Vector Functions
+
+### angle_vector
+
+```cpp
+math::vec3 angle_vector(const math::vec3& angle);
+```
+
+Converts an angle to a directional vector.
+
+<ParamField path="angle" type="const math::vec3&">
+  Input angle (pitch, yaw, roll)
+</ParamField>
+
+**Returns:** Forward directional vector
+
+---
+
+### angle_vectors
+
+```cpp
+void angle_vectors(
+    const math::vec3& angles, 
+    math::vec3* fw, 
+    math::vec3* rg = nullptr, 
+    math::vec3* up = nullptr
+);
+```
+
+Converts angles to directional vectors (forward, right, up).
+
+<ParamField path="angles" type="const math::vec3&">
+  Input angles (pitch, yaw, roll)
+</ParamField>
+
+<ParamField path="fw" type="math::vec3*">
+  Output forward vector (required)
+</ParamField>
+
+<ParamField path="rg" type="math::vec3*" default="nullptr">
+  Output right vector (optional)
+</ParamField>
+
+<ParamField path="up" type="math::vec3*" default="nullptr">
+  Output up vector (optional)
+</ParamField>
+
+---
+
+### vector_angles
+
+```cpp
+void vector_angles(math::vec3& fw, math::vec3& angles);
+```
+
+Converts a forward vector to angles.
+
+<ParamField path="fw" type="math::vec3&">
+  Input forward vector
+</ParamField>
+
+<ParamField path="angles" type="math::vec3&">
+  Output angles (pitch, yaw, roll)
+</ParamField>
+
+---
+
+### calculate_angle
+
+```cpp
+math::vec3 calculate_angle(const math::vec3& src, const math::vec3& dst);
+```
+
+Calculates the angle between two 3D positions.
+
+<ParamField path="src" type="const math::vec3&">
+  Source position
+</ParamField>
+
+<ParamField path="dst" type="const math::vec3&">
+  Destination position
+</ParamField>
+
+**Returns:** Angle from source to destination
+
+---
+
+## Projection and Transformation
+
+### world_to_screen
+
+```cpp
+bool world_to_screen(const math::vec3 origin, math::vec3& screen);
+```
+
+Projects a 3D world position to 2D screen coordinates.
+
+<ParamField path="origin" type="const math::vec3">
+  World position to project
+</ParamField>
+
+<ParamField path="screen" type="math::vec3&">
+  Output screen coordinates (x, y)
+</ParamField>
+
+**Returns:** `true` if position is visible on screen, `false` otherwise
+
+<Note>
+  This function uses the game's view matrix for projection. Returns false if the position is behind the camera.
+</Note>
+
+---
+
+### vector_transform
+
+```cpp
+vec3 vector_transform(vec3 vector, matrix_3x4 matrix);
+```
+
+Transforms a vector by a 3x4 matrix.
+
+<ParamField path="vector" type="vec3">
+  Input vector to transform
+</ParamField>
+
+<ParamField path="matrix" type="matrix_3x4">
+  Transformation matrix
+</ParamField>
+
+**Returns:** Transformed vector
+
+---
+
+### matrix_position
+
+```cpp
+math::vec3 matrix_position(const math::matrix_3x4& src);
+```
+
+Extracts position from a transformation matrix.
+
+<ParamField path="src" type="const math::matrix_3x4&">
+  Source transformation matrix
+</ParamField>
+
+**Returns:** Position vector extracted from matrix
+
+---
+
+## Angle Utilities
+
+### clamp_angle
+
+```cpp
+void clamp_angle(math::vec3& angle);
+```
+
+Clamps angles to valid ranges (pitch: -89 to 89, yaw: -180 to 180).
+
+<ParamField path="angle" type="math::vec3&">
+  Angle to clamp (modified in-place)
+</ParamField>
+
+---
+
+### normalize_yaw
+
+```cpp
+float normalize_yaw(float yaw);
+```
+
+Normalizes a yaw angle to the range [-180, 180].
+
+<ParamField path="yaw" type="float">
+  Yaw angle to normalize
+</ParamField>
+
+**Returns:** Normalized yaw angle
+
+---
+
+### approach_angle
+
+```cpp
+float approach_angle(float to, float from, const float speed);
+```
+
+Smoothly interpolates from one angle to another.
+
+<ParamField path="to" type="float">
+  Target angle
+</ParamField>
+
+<ParamField path="from" type="float">
+  Starting angle
+</ParamField>
+
+<ParamField path="speed" type="const float">
+  Interpolation speed
+</ParamField>
+
+**Returns:** Interpolated angle
+
+---
+
+### snap_yaw
+
+```cpp
+float snap_yaw(float value);
+```
+
+Snaps a yaw value to discrete angles.
+
+<ParamField path="value" type="float">
+  Yaw value to snap
+</ParamField>
+
+**Returns:** Snapped yaw value
+
+---
+
+## FOV Calculation
+
+### get_fov
+
+```cpp
+template<typename T = float>
+T get_fov(const math::vec3& view_angles, const math::vec3& start, const math::vec3& end);
+```
+
+Calculates the field of view (FOV) between view angles and a target.
+
+<ParamField path="view_angles" type="const math::vec3&">
+  Current view angles
+</ParamField>
+
+<ParamField path="start" type="const math::vec3&">
+  Starting position
+</ParamField>
+
+<ParamField path="end" type="const math::vec3&">
+  Target position
+</ParamField>
+
+**Returns:** FOV angle in degrees
+
+---
+
+## Trigonometric Functions
+
+### sin_cos
+
+```cpp
+void sin_cos(const float a, float* s, float* c);
+```
+
+Calculates sine and cosine simultaneously for better performance.
+
+<ParamField path="a" type="const float">
+  Angle in radians
+</ParamField>
+
+<ParamField path="s" type="float*">
+  Output sine value
+</ParamField>
+
+<ParamField path="c" type="float*">
+  Output cosine value
+</ParamField>
+
+---
+
+### Fast Math Functions
+
+Optimized approximations for performance-critical code:
+
+```cpp
+namespace math::util {
+    void fast_sqrt(float* __restrict p_out, float* __restrict p_in);
+    float fast_asin(float x);
+    float fast_sin(float x);
+    float fast_cos(const float x);
+}
+```
+
+<Note>
+  Fast math functions trade some accuracy for performance. Use for non-critical calculations where speed is more important than precision.
+</Note>
+
+---
+
+## Utility Functions
+
+### min / max
+
+```cpp
+template<typename T>
+constexpr T min(const T& t1, const T& t2);
+
+template<typename T, typename... ts_>
+constexpr T min(const T& t1, const T& t2, ts_&&... ts);
+
+template<typename T>
+constexpr T max(const T& t1, const T& t2);
+
+template<typename T, typename... ts_>
+constexpr T max(const T& t1, const T& t2, ts_&&... ts);
+```
+
+Variadic min/max functions supporting multiple arguments.
+
+---
+
+### random
+
+```cpp
+template<typename T>
+constexpr T random(const T min, const T max);
+```
+
+Generates a random value between min and max.
+
+<ParamField path="min" type="const T">
+  Minimum value (inclusive)
+</ParamField>
+
+<ParamField path="max" type="const T">
+  Maximum value (inclusive)
+</ParamField>
+
+**Returns:** Random value in range [min, max]
+
+---
+
+### Angle Conversion
+
+```cpp
+constexpr float rad2deg(const float x);
+constexpr float deg2rad(const float x);
+```
+
+Convert between radians and degrees.
+
+<CodeGroup>
+```cpp Radians to Degrees
+float degrees = math::rad2deg(1.57f); // ~90 degrees
+```
+
+```cpp Degrees to Radians
+float radians = math::deg2rad(90.0f); // ~1.57 radians
+```
+</CodeGroup>
+
+---
+
+## Example Usage
+
+<CodeGroup>
+```cpp Angle Calculation
+// Calculate angle to target
+math::vec3 my_pos(100, 200, 50);
+math::vec3 target_pos(500, 300, 60);
+math::vec3 angle = math::calculate_angle(my_pos, target_pos);
+math::clamp_angle(angle);
+```
+
+```cpp World to Screen
+// Project world position to screen
+math::vec3 world_pos(1000, 500, 100);
+math::vec3 screen_pos;
+if (math::world_to_screen(world_pos, screen_pos)) {
+    // screen_pos.x and screen_pos.y contain screen coordinates
+}
+```
+
+```cpp FOV Check
+// Check if target is within FOV
+math::vec3 view_angles = get_view_angles();
+math::vec3 start = get_local_player_pos();
+math::vec3 target = get_enemy_pos();
+
+float fov = math::get_fov(view_angles, start, target);
+if (fov < 5.0f) {
+    // Target is within 5 degree FOV
+}
+```
+</CodeGroup>

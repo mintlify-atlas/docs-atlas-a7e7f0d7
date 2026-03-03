@@ -1,0 +1,196 @@
+---
+title: "HotWheels SDK"
+description: "A powerful C++ game modification SDK for Counter-Strike: Global Offensive"
+---
+
+# HotWheels SDK
+
+HotWheels SDK is a comprehensive C++ framework for creating game modifications for Counter-Strike: Global Offensive. Built with modern C++20, it provides a robust foundation for developing features like aimbots, visuals, movement enhancements, and more.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get up and running with HotWheels SDK in minutes
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Set up your development environment and build the SDK
+  </Card>
+  <Card
+    title="Hooks System"
+    icon="link"
+    href="#hooks-system"
+  >
+    Learn about the powerful hooking system for game events
+  </Card>
+  <Card
+    title="SDK Interfaces"
+    icon="code"
+    href="#core-interfaces"
+  >
+    Explore the game interfaces and utilities
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Advanced Hooking System" icon="link">
+    Built on MinHook, the SDK provides hooks for critical game functions:
+    - **CreateMove**: Input manipulation and movement control
+    - **PaintTraverse**: UI rendering and overlays
+    - **FrameStageNotify**: Per-frame game state monitoring
+    - **DrawModelExecute**: Model rendering and chams
+    - **EndScene**: DirectX 9 rendering pipeline access
+  </Accordion>
+
+  <Accordion title="Game Interface Abstraction" icon="cube">
+    Clean C++ interfaces for CS:GO internals:
+    - Engine client (`iv_engine_client`)
+    - Entity list management (`i_client_entity_list`)
+    - Material system (`i_material_system`)
+    - Model rendering (`iv_model_render`)
+    - Input system and prediction
+  </Accordion>
+
+  <Accordion title="Feature Modules" icon="puzzle-piece">
+    Ready-to-use feature implementations:
+    - **Aimbot**: Advanced targeting with hitchance calculation
+    - **Visuals**: ESP, chams, and glow effects
+    - **Movement**: Bunny hop, strafe assistance
+    - **Prediction**: Client-side prediction system
+    - **Menu System**: ImGui-based configuration interface
+  </Accordion>
+
+  <Accordion title="Utilities & Helpers" icon="wrench">
+    Comprehensive utility library:
+    - Math operations (vectors, matrices, quaternions)
+    - Console logging with color-coded output
+    - NetVar scanning and management
+    - Pattern scanning and signature finding
+    - Renderer wrapper for DirectX 9
+    - Keybind system for input handling
+  </Accordion>
+</AccordionGroup>
+
+## Architecture Overview
+
+The SDK follows a modular architecture with clear separation of concerns:
+
+```cpp
+// Main initialization flow
+DWORD WINAPI hotwheels::init(void* module_handle)
+{
+    // Wait for game modules to load
+    while (!GetModuleHandleA(SERVERBROWSER_DLL))
+        utils::sleep(200);
+
+    // Initialize core systems
+    g_config.init();      // Configuration system
+    g_csgo.init();        // CS:GO globals and offsets
+    g_ctx.init();         // Runtime context
+    g_interfaces.init();  // Game interfaces
+    g_menu.init_input();  // Menu input handling
+    g_hooks.init();       // Hook installation
+    
+    // Setup unload keybind (DELETE key)
+    g_input.add_keybind(VK_DELETE, [](bool pressed) -> void {
+        CreateThread(nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(unload), 
+                     nullptr, 0, nullptr);
+    });
+
+    return 0;
+}
+```
+
+### Core Interfaces
+
+The SDK provides access to essential CS:GO interfaces:
+
+<CodeGroup>
+```cpp Interfaces Structure
+struct interfaces {
+    IDirect3DDevice9* device;
+    sdk::iv_engine_client* engine;
+    sdk::i_client_dll* client;
+    sdk::i_global_vars* globals;
+    sdk::c_input* input;
+    sdk::i_client_entity_list* entity_list;
+    sdk::i_prediction* prediction;
+    sdk::i_engine_trace_client* engine_trace;
+    sdk::i_material_system* material_system;
+    sdk::iv_model_render* model_render;
+    // ... and more
+};
+```
+
+```cpp Usage Example
+// Access game interfaces globally
+auto local_player = g_interfaces.entity_list->get_client_entity(
+    g_interfaces.engine->get_local_player()
+);
+
+// Convert ticks to time
+float time = sdk::ticks_to_time(tick_count);
+int ticks = sdk::time_to_ticks(time_value);
+```
+</CodeGroup>
+
+## Project Structure
+
+<Note>
+The SDK is organized into logical modules for easy navigation:
+
+- **`game/`** - CS:GO SDK headers and class definitions
+- **`globals/`** - Global state, interfaces, and hooks
+- **`hacks/`** - Feature implementations (aimbot, visuals, menu)
+- **`hooks/`** - Hook implementations and callbacks
+- **`utils/`** - Utility functions and helpers
+- **`dependencies/`** - Third-party libraries (ImGui, MinHook, etc.)
+</Note>
+
+## Dependencies
+
+HotWheels SDK includes the following libraries:
+
+| Library | Purpose | Version |
+|---------|---------|----------|
+| **ImGui** | Menu UI framework | Latest |
+| **MinHook** | Function hooking | Latest |
+| **FreeType** | Font rendering | 2.x |
+| **DirectX 9 SDK** | Graphics rendering | June 2010 |
+| **nlohmann/json** | Configuration serialization | Latest |
+| **Lazy Importer** | Import obfuscation | Latest |
+
+<Warning>
+**Security Notice**: This SDK is for educational purposes only. Modifying game files may violate terms of service and result in permanent bans. Use responsibly and only in offline/private environments.
+</Warning>
+
+## Next Steps
+
+Ready to get started? Follow these guides:
+
+<Steps>
+  <Step title="Install Visual Studio 2019/2022">
+    Download and configure your development environment with the required components
+  </Step>
+  <Step title="Clone and Build">
+    Clone the repository and compile the DLL using the provided project files
+  </Step>
+  <Step title="Inject and Test">
+    Load the DLL into CS:GO and verify the menu appears with INSERT key
+  </Step>
+  <Step title="Customize Features">
+    Explore the codebase and add your own features
+  </Step>
+</Steps>
+
+<Card title="Ready to begin?" icon="play" href="/installation">
+  Continue to the installation guide to set up your development environment
+</Card>

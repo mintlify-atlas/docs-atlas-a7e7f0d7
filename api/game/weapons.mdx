@@ -1,0 +1,264 @@
+---
+title: "Weapons"
+description: "Weapon system classes including c_base_combat_weapon and weapon data structures"
+---
+
+## c_base_combat_weapon
+
+Represents a combat weapon in CS:GO. Provides access to weapon state, timing, ammunition, and accuracy calculations.
+
+**Source:** `game/sdk/classes/c_base_combat_weapon.h:10`
+
+**Inherits:** `c_base_entity`
+
+### Network Variables
+
+<ParamField path="next_primary_attack" type="float">
+  Server time when the weapon can fire its next primary attack
+  
+  **Netvar:** `CBaseCombatWeapon::m_flNextPrimaryAttack`
+  
+  ```cpp
+  float time_until_fire = weapon->next_primary_attack() - g_interfaces.global_vars->cur_time;
+  ```
+</ParamField>
+
+<ParamField path="next_secondary_attack" type="float">
+  Server time when the weapon can fire its next secondary attack
+  
+  **Netvar:** `CBaseCombatWeapon::m_flNextSecondaryAttack`
+</ParamField>
+
+<ParamField path="clip_mag" type="std::int32_t">
+  Current ammunition in the weapon's magazine/clip
+  
+  **Netvar:** `CBaseCombatWeapon::m_iClip1`
+  
+  ```cpp
+  int bullets_remaining = weapon->clip_mag();
+  ```
+</ParamField>
+
+<ParamField path="clip_reserve" type="std::int32_t">
+  Reserve ammunition count for primary fire
+  
+  **Netvar:** `CBaseCombatWeapon::m_iPrimaryReserveAmmoCount`
+</ParamField>
+
+<ParamField path="view_model_index" type="std::int32_t">
+  Model index for the first-person view model
+  
+  **Netvar:** `CBaseCombatWeapon::m_iViewModelIndex`
+</ParamField>
+
+<ParamField path="world_model_index" type="std::int32_t">
+  Model index for the third-person world model
+  
+  **Netvar:** `CBaseCombatWeapon::m_iWorldModelIndex`
+</ParamField>
+
+<ParamField path="world_dropped_model_index" type="std::int32_t">
+  Model index when weapon is dropped in the world
+  
+  **Netvar:** `CBaseCombatWeapon::m_iWorldDroppedModelIndex`
+</ParamField>
+
+<ParamField path="postpone_fire_ready_time" type="float">
+  Time when postponed fire will be ready
+  
+  **Netvar:** `CBaseCombatWeapon::m_flPostponeFireReadyTime`
+</ParamField>
+
+<ParamField path="world_view_model" type="std::uintptr_t">
+  Handle to the weapon's world view model entity
+  
+  **Netvar:** `CBaseCombatWeapon::m_hWeaponWorldModel`
+</ParamField>
+
+<ParamField path="definition_index" type="short">
+  Weapon definition index (identifies weapon type)
+  
+  **Netvar:** `CBaseAttributableItem::m_iItemDefinitionIndex`
+  
+  ```cpp
+  short weapon_id = weapon->definition_index();
+  // Compare with weapon IDs (7 = AK-47, 4 = Glock, etc.)
+  ```
+</ParamField>
+
+### Methods
+
+<ResponseField name="get_weapon_data" type="sdk::weapon_data_t*">
+  Retrieves the weapon's static data including damage, range, and accuracy values
+  
+  **Returns:** Pointer to weapon data structure, or `nullptr` if unavailable
+  
+  **Virtual Index:** 461
+  
+  ```cpp
+  auto data = weapon->get_weapon_data();
+  if (data) {
+      float damage = data->damage;
+      float range = data->range;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="inaccuracy" type="float">
+  Calculates current weapon inaccuracy value based on movement, stance, and other factors
+  
+  **Returns:** Inaccuracy value (higher = less accurate)
+  
+  **Virtual Index:** 483
+  
+  ```cpp
+  float current_inaccuracy = weapon->inaccuracy();
+  ```
+</ResponseField>
+
+<ResponseField name="spread" type="float">
+  Calculates current weapon spread value
+  
+  **Returns:** Spread value
+  
+  **Virtual Index:** 453
+  
+  ```cpp
+  float current_spread = weapon->spread();
+  ```
+</ResponseField>
+
+<ResponseField name="spread_vector" type="math::vec3">
+  Generates a random spread vector for bullet trajectory calculation
+  
+  **Parameters:**
+  - `seed` - Random seed for reproducibility
+  - `inaccuracy` - Inaccuracy value
+  - `spread` - Spread value
+  
+  **Returns:** 3D vector representing spread offset
+  
+  This method uses the weapon's bullet count from weapon data and generates a randomized spread pattern using sine/cosine calculations.
+  
+  ```cpp
+  float inaccuracy = weapon->inaccuracy();
+  float spread = weapon->spread();
+  math::vec3 spread_vec = weapon->spread_vector(cmd->random_seed, inaccuracy, spread);
+  
+  // Apply to aim angle
+  math::vec3 aim_direction = forward + right * spread_vec.x + up * spread_vec.y;
+  ```
+  
+  <Expandable title="Implementation Details">
+    The spread vector calculation:
+    1. Validates weapon data and bullet count
+    2. Generates 4 random values (r1-r4) between specific ranges
+    3. Computes sine and cosine for r2 and r4
+    4. Combines inaccuracy and spread using trigonometric functions
+    5. Returns 2D spread in a 3D vector (z is always 0)
+    
+    **Source:** `game/sdk/classes/c_base_combat_weapon.h:39`
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="can_shoot_primary" type="bool">
+  Checks if the weapon can fire primary attack
+  
+  **Returns:** `true` if primary fire is available
+  
+  <Note>Implementation defined externally</Note>
+</ResponseField>
+
+<ResponseField name="can_shoot_secondary" type="bool">
+  Checks if the weapon can fire secondary attack
+  
+  **Returns:** `true` if secondary fire is available
+  
+  <Note>Implementation defined externally</Note>
+</ResponseField>
+
+---
+
+## weapon_data_t
+
+Static weapon configuration data structure.
+
+**Source:** `game/sdk/structs/weapon_data_t.h`
+
+### Common Fields
+
+<ResponseField name="damage" type="int">
+  Base damage dealt by the weapon
+</ResponseField>
+
+<ResponseField name="bullets" type="int">
+  Number of bullets fired per shot (typically 1, or 9 for shotguns)
+</ResponseField>
+
+<ResponseField name="range" type="float">
+  Maximum effective range of the weapon
+</ResponseField>
+
+<ResponseField name="range_modifier" type="float">
+  Damage falloff modifier over distance
+</ResponseField>
+
+<ResponseField name="penetration" type="float">
+  Penetration power through surfaces
+</ResponseField>
+
+---
+
+## Usage Examples
+
+### Check if weapon can fire
+
+```cpp
+auto weapon = player->active_weapon();
+if (!weapon) return;
+
+float server_time = player->tick_base() * g_interfaces.global_vars->interval_per_tick;
+float next_attack = weapon->next_primary_attack();
+
+if (server_time >= next_attack) {
+    // Weapon is ready to fire
+    if (weapon->clip_mag() > 0) {
+        // Has ammunition
+    }
+}
+```
+
+### Calculate weapon accuracy
+
+```cpp
+auto weapon = player->active_weapon();
+if (!weapon) return;
+
+float inaccuracy = weapon->inaccuracy();
+float spread = weapon->spread();
+float total_spread = inaccuracy + spread;
+
+if (total_spread < 0.01f) {
+    // Weapon is very accurate
+}
+```
+
+### Get weapon information
+
+```cpp
+auto weapon = player->active_weapon();
+if (!weapon) return;
+
+auto data = weapon->get_weapon_data();
+if (data && data->bullets > 0) {
+    int clip = weapon->clip_mag();
+    int reserve = weapon->clip_reserve();
+    short weapon_id = weapon->definition_index();
+    
+    // Use weapon information
+}
+```
+
+<Warning>
+  Always validate weapon pointers and weapon data before accessing properties. Weapon data can be `nullptr` for invalid or uninitialized weapons.
+</Warning>
