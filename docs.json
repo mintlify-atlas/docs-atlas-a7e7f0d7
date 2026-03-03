@@ -56,7 +56,11 @@
               "utilities/renderer",
               "utilities/console",
               "utilities/entity-list",
-              "utilities/netvars"
+              "utilities/netvars",
+              "utilities/vfunc",
+              "utilities/files",
+              "utilities/convars",
+              "utilities/keybinds"
             ]
           }
         ]
@@ -70,7 +74,10 @@
               "api/game/entities",
               "api/game/weapons",
               "api/game/players",
-              "api/game/interfaces"
+              "api/game/interfaces",
+              "api/game/usercmd",
+              "api/game/client-state",
+              "api/game/input"
             ]
           },
           {

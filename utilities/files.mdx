@@ -1,0 +1,140 @@
+---
+title: "File Management"
+description: "Utility for managing configuration files and SDK settings storage"
+---
+
+## Overview
+
+The `files` utility manages the SDK's configuration file system, providing access to the working directory and file enumeration capabilities. Files are stored in the user's Documents folder under `.hw/settings/`.
+
+## Usage
+
+Access the global file manager instance:
+
+```cpp
+#include "utils/files/files.h"
+
+// Use the global instance
+g_files.refresh();
+```
+
+## Global Instance
+
+<ParamField path="g_files" type="files::impl">
+  Global singleton instance of the file management utility
+</ParamField>
+
+## Class: files::impl
+
+### Properties
+
+<ResponseField name="fs_path" type="std::filesystem::path">
+  The filesystem path to the settings directory. Automatically set to `%USERPROFILE%\Documents\.hw\settings`
+</ResponseField>
+
+<ResponseField name="info.file_names" type="std::deque<std::string>">
+  Collection of configuration file names found in the settings directory (populated by `refresh()`)
+</ResponseField>
+
+<ResponseField name="info.variables" type="std::vector<config::option>">
+  Vector of configuration options loaded from files
+</ResponseField>
+
+### Methods
+
+#### get_working_path
+
+Retrieves the SDK's working directory path in the user's Documents folder.
+
+<ResponseField name="return" type="std::filesystem::path">
+  Path to `%USERPROFILE%\Documents\.hw`
+</ResponseField>
+
+```cpp
+auto working_path = g_files.get_working_path();
+// Returns: C:\Users\Username\Documents\.hw
+```
+
+#### refresh
+
+Scans the settings directory and populates the `file_names` collection with all `.hw` configuration files.
+
+```cpp
+g_files.refresh();
+
+// Access discovered files
+for (const auto& filename : g_files.info.file_names) {
+    // Process each .hw file
+}
+```
+
+## Complete Example
+
+```cpp
+#include "utils/files/files.h"
+#include <iostream>
+
+void list_config_files()
+{
+    // Refresh the file list from disk
+    g_files.refresh();
+    
+    // Get the settings path
+    std::cout << "Settings directory: " << g_files.fs_path << std::endl;
+    
+    // Iterate through discovered configuration files
+    std::cout << "Found " << g_files.info.file_names.size() << " config files:" << std::endl;
+    
+    for (const auto& file : g_files.info.file_names) {
+        std::cout << "  - " << file << std::endl;
+    }
+}
+
+void get_full_path_example()
+{
+    auto working_path = g_files.get_working_path();
+    auto settings_path = g_files.fs_path;
+    
+    std::cout << "Working path: " << working_path << std::endl;
+    std::cout << "Settings path: " << settings_path << std::endl;
+    
+    // Example output:
+    // Working path: C:\Users\Username\Documents\.hw
+    // Settings path: C:\Users\Username\Documents\.hw\settings
+}
+```
+
+## File Structure
+
+<CodeGroup>
+
+```plaintext Directory Layout
+%USERPROFILE%\Documents\.hw\           (working path)
+└── settings\                          (fs_path)
+    ├── default.hw
+    ├── competitive.hw
+    └── custom.hw
+```
+
+```cpp Accessing Files
+// Refresh to scan directory
+g_files.refresh();
+
+// The file_names deque now contains:
+// ["default.hw", "competitive.hw", "custom.hw"]
+
+for (const auto& name : g_files.info.file_names) {
+    auto full_path = g_files.fs_path / name;
+    // Process file at full_path
+}
+```
+
+</CodeGroup>
+
+<Note>
+The `refresh()` method only scans for files with the `.hw` extension. Other files in the directory are ignored.
+</Note>
+
+<Warning>
+Always call `refresh()` before accessing `info.file_names` to ensure the file list is up-to-date with the filesystem state.
+</Warning>

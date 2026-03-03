@@ -1,0 +1,111 @@
+---
+title: "Virtual Function Calling"
+description: "Utility for calling virtual functions from C++ vtables at runtime"
+---
+
+## Overview
+
+The `vfunc` utility provides a type-safe way to call virtual functions from C++ vtables by index. This is particularly useful when interfacing with compiled libraries where you need to call virtual methods without access to the original class definitions.
+
+## Usage
+
+Include the header file:
+
+```cpp
+#include "utils/vfunc/vfunc.h"
+```
+
+## Functions
+
+### call
+
+Calls a virtual function from an object's vtable at a specified index.
+
+<ParamField path="thisptr" type="void*" required>
+  Pointer to the object instance
+</ParamField>
+
+<ParamField path="index" type="std::size_t" required>
+  Index of the virtual function in the vtable (0-based)
+</ParamField>
+
+<ParamField path="args" type="VA...">
+  Variadic arguments to pass to the virtual function
+</ParamField>
+
+<ResponseField name="return" type="T">
+  The return value of the called virtual function, type specified as template parameter
+</ResponseField>
+
+#### Example
+
+```cpp
+// Call a virtual function that returns an int at index 5
+auto result = virtual_func::call<int>(object_ptr, 5, arg1, arg2);
+
+// Call a void virtual function at index 12
+virtual_func::call<void>(object_ptr, 12, some_argument);
+
+// Call a virtual function that returns a pointer at index 3
+auto* entity = virtual_func::call<Entity*>(entity_list, 3, entity_index);
+```
+
+### get
+
+Retrieves a pointer to a virtual function from an object's vtable without calling it.
+
+<ParamField path="thisptr" type="void*" required>
+  Pointer to the object instance
+</ParamField>
+
+<ParamField path="index" type="std::size_t" required>
+  Index of the virtual function in the vtable (0-based)
+</ParamField>
+
+<ResponseField name="return" type="T">
+  Pointer to the virtual function at the specified index (defaults to void* if not specified)
+</ResponseField>
+
+#### Example
+
+```cpp
+// Get a function pointer from the vtable
+auto fn_ptr = virtual_func::get<void(*)(int)>(object_ptr, 8);
+
+// Get a void* pointer to a vtable entry
+auto generic_ptr = virtual_func::get(object_ptr, 15);
+```
+
+## Complete Example
+
+```cpp
+#include "utils/vfunc/vfunc.h"
+
+void example_usage()
+{
+    // Assume we have an interface pointer from the game engine
+    void* entity_list_interface = get_entity_list();
+    
+    // Call virtual function at index 3 to get entity by index
+    // Signature: Entity* GetClientEntity(int index)
+    auto* player = virtual_func::call<Entity*>(entity_list_interface, 3, 1);
+    
+    if (player) {
+        // Call virtual function on the player entity at index 9
+        // Signature: int GetHealth()
+        int health = virtual_func::call<int>(player, 9);
+        
+        // Call virtual function with no return value at index 15
+        // Signature: void SetHealth(int)
+        virtual_func::call<void>(player, 15, 100);
+    }
+}
+```
+
+<Note>
+The `call` function uses `__thiscall` calling convention, which is standard for C++ member functions on x86 Windows. Ensure the index matches the actual vtable layout of the object you're calling.
+</Note>
+
+<Warning>
+Virtual function indices are fragile and can change between different versions of the target software. Always verify vtable offsets when updating to new versions.
+</Warning>

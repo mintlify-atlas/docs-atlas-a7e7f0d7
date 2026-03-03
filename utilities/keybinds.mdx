@@ -1,0 +1,399 @@
+---
+title: "Keybind System"
+description: "Comprehensive input handling system for keyboard and mouse events"
+---
+
+## Overview
+
+The `keybinds` utility provides a robust input handling system that manages keyboard and mouse events, including key states, keybind callbacks, and mouse tracking. It processes Windows messages and maintains state for all input devices.
+
+## Usage
+
+Access the global input manager:
+
+```cpp
+#include "utils/keybinds/keybinds.h"
+
+// Use the global instance
+g_input.add_keybind(VK_F1, [](bool pressed) {
+    if (pressed) {
+        // Handle key press
+    }
+});
+```
+
+## Global Instance
+
+<ParamField path="g_input" type="input::impl">
+  Global singleton instance of the input management system
+</ParamField>
+
+## Enumerations
+
+### key_state_t
+
+Represents the state of a key or mouse button.
+
+<ResponseField name="KEY_NONE" type="int" value="0">
+  No state / default state
+</ResponseField>
+
+<ResponseField name="KEY_UP" type="int" value="1">
+  Key is released
+</ResponseField>
+
+<ResponseField name="KEY_DOWN" type="int" value="2">
+  Key is pressed down
+</ResponseField>
+
+<ResponseField name="KEY_RELEASED" type="int" value="3">
+  Key was just released (transient state, 100ms window)
+</ResponseField>
+
+## Class: input::impl
+
+### Properties
+
+<ResponseField name="key_states" type="std::array<key_info_t, 256>">
+  Array tracking the state and timestamp of all 256 virtual key codes
+</ResponseField>
+
+<ResponseField name="key_binds" type="std::deque<keybind>">
+  Collection of registered keybind callbacks
+</ResponseField>
+
+<ResponseField name="mouse.pos" type="math::vec2<int>">
+  Current mouse cursor position (x, y coordinates)
+</ResponseField>
+
+<ResponseField name="mouse.scroll_amt" type="int">
+  Current mouse scroll amount (positive = scroll up, negative = scroll down)
+</ResponseField>
+
+### Methods
+
+#### think
+
+Processes Windows input messages and updates key states. Call this from your window procedure.
+
+<ParamField path="msg" type="UINT" required>
+  Windows message type (WM_KEYDOWN, WM_MOUSEMOVE, etc.)
+</ParamField>
+
+<ParamField path="wparam" type="WPARAM" required>
+  Message-specific parameter
+</ParamField>
+
+<ParamField path="lparam" type="LPARAM" required>
+  Message-specific parameter
+</ParamField>
+
+```cpp
+// In your window procedure
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    g_input.think(msg, wparam, lparam);
+    // ... rest of window procedure
+}
+```
+
+#### add_keybind
+
+Registers a new keybind with a callback function.
+
+<ParamField path="virtual_key" type="std::uint8_t" required>
+  Virtual key code (e.g., VK_F1, VK_SPACE, VK_LBUTTON)
+</ParamField>
+
+<ParamField path="callback" type="std::function<void(bool)>" required>
+  Function to call when the key state changes. Parameter is true when pressed, false when released.
+</ParamField>
+
+```cpp
+g_input.add_keybind(VK_F1, [](bool pressed) {
+    if (pressed) {
+        std::cout << "F1 pressed" << std::endl;
+    } else {
+        std::cout << "F1 released" << std::endl;
+    }
+});
+```
+
+#### remove_keybind
+
+Removes all keybinds associated with a specific virtual key.
+
+<ParamField path="virtual_key" type="std::uint8_t" required>
+  Virtual key code to remove keybinds for
+</ParamField>
+
+```cpp
+// Remove all F1 keybinds
+g_input.remove_keybind(VK_F1);
+```
+
+#### poll_keybind
+
+Enters polling mode to wait for the user to press any key, useful for keybind configuration UIs.
+
+<ParamField path="callback" type="std::function<void(std::uint8_t, bool)>" required>
+  Function called when a valid key is pressed. Receives the virtual key code and pressed state.
+</ParamField>
+
+<ParamField path="callback_fail" type="std::function<void(bool)>">
+  Optional function called when polling is cancelled (ESC, mouse buttons)
+</ParamField>
+
+```cpp
+g_input.poll_keybind(
+    [](std::uint8_t key, bool pressed) {
+        if (pressed) {
+            std::cout << "Key selected: " << (int)key << std::endl;
+        }
+    },
+    [](bool cancelled) {
+        std::cout << "Polling cancelled" << std::endl;
+    }
+);
+```
+
+#### key_state
+
+Checks if a key is in a specific state.
+
+<ParamField path="state" type="key_state_t" required>
+  State to check for (KEY_UP, KEY_DOWN, KEY_RELEASED)
+</ParamField>
+
+<ParamField path="key_id" type="int" required>
+  Virtual key code to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the key is in the specified state
+</ResponseField>
+
+```cpp
+if (g_input.key_state(input::KEY_DOWN, VK_SHIFT)) {
+    // Shift is currently held down
+}
+
+if (g_input.key_state(input::KEY_RELEASED, VK_SPACE)) {
+    // Space was just released (within 100ms)
+}
+```
+
+#### key_to_char
+
+Converts a virtual key code to a human-readable string.
+
+<ParamField path="virtual_key" type="std::uint8_t" required>
+  Virtual key code to convert
+</ParamField>
+
+<ResponseField name="return" type="char*">
+  String representation of the key (e.g., "F1", "SPACE", "LBUTTON")
+</ResponseField>
+
+```cpp
+char* key_name = g_input.key_to_char(VK_F1);
+// Returns: "F1"
+
+key_name = g_input.key_to_char(VK_LBUTTON);
+// Returns: "LBUTTON"
+```
+
+### Mouse Functions
+
+#### in_params (Coordinates)
+
+Checks if the mouse cursor is within a rectangular area.
+
+<ParamField path="x" type="int" required>
+  X coordinate of the rectangle's top-left corner
+</ParamField>
+
+<ParamField path="y" type="int" required>
+  Y coordinate of the rectangle's top-left corner
+</ParamField>
+
+<ParamField path="w" type="int" required>
+  Width of the rectangle
+</ParamField>
+
+<ParamField path="h" type="int" required>
+  Height of the rectangle
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the mouse is within the specified rectangle
+</ResponseField>
+
+```cpp
+if (g_input.mouse.in_params(100, 100, 200, 50)) {
+    // Mouse is hovering over the button area
+}
+```
+
+#### in_params (Vectors)
+
+Checks if the mouse cursor is within a rectangular area using vector parameters.
+
+<ParamField path="m_pos" type="const math::vec2<int>&" required>
+  Position vector (x, y) of the rectangle's top-left corner
+</ParamField>
+
+<ParamField path="m_size" type="const math::vec2<int>&" required>
+  Size vector (width, height) of the rectangle
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the mouse is within the specified rectangle
+</ResponseField>
+
+```cpp
+math::vec2<int> button_pos(100, 100);
+math::vec2<int> button_size(200, 50);
+
+if (g_input.mouse.in_params(button_pos, button_size)) {
+    // Mouse is hovering over the button
+}
+```
+
+## Complete Examples
+
+<CodeGroup>
+
+```cpp Basic Keybind
+#include "utils/keybinds/keybinds.h"
+
+void setup_basic_keybinds()
+{
+    // Toggle menu with INSERT key
+    g_input.add_keybind(VK_INSERT, [](bool pressed) {
+        if (pressed) {
+            menu_open = !menu_open;
+        }
+    });
+    
+    // Panic key - remove all keybinds
+    g_input.add_keybind(VK_END, [](bool pressed) {
+        if (pressed) {
+            // Clean up and exit
+            cleanup_and_exit();
+        }
+    });
+}
+```
+
+```cpp Mouse Tracking
+#include "utils/keybinds/keybinds.h"
+
+void handle_ui_interaction()
+{
+    // Define button area
+    math::vec2<int> button_pos(100, 100);
+    math::vec2<int> button_size(200, 50);
+    
+    // Check if mouse is hovering
+    bool hovering = g_input.mouse.in_params(button_pos, button_size);
+    
+    // Check for click
+    if (hovering && g_input.key_state(input::KEY_RELEASED, VK_LBUTTON)) {
+        std::cout << "Button clicked at: " 
+                  << g_input.mouse.pos.x << ", " 
+                  << g_input.mouse.pos.y << std::endl;
+    }
+    
+    // Handle scroll
+    if (g_input.mouse.scroll_amt != 0) {
+        std::cout << "Scrolled: " << g_input.mouse.scroll_amt << std::endl;
+    }
+}
+```
+
+```cpp Key State Checking
+#include "utils/keybinds/keybinds.h"
+
+void game_loop()
+{
+    // Check if shift is held for sprint
+    if (g_input.key_state(input::KEY_DOWN, VK_SHIFT)) {
+        player_speed = 2.0f;
+    } else {
+        player_speed = 1.0f;
+    }
+    
+    // Check for jump on space release
+    if (g_input.key_state(input::KEY_RELEASED, VK_SPACE)) {
+        player_jump();
+    }
+    
+    // Check if control is currently down
+    if (g_input.key_state(input::KEY_DOWN, VK_CONTROL)) {
+        // Enable crouch
+    }
+}
+```
+
+```cpp Keybind Configuration UI
+#include "utils/keybinds/keybinds.h"
+
+class KeybindConfig
+{
+public:
+    void start_rebinding(const char* action_name)
+    {
+        current_action = action_name;
+        
+        g_input.poll_keybind(
+            [this](std::uint8_t key, bool pressed) {
+                if (pressed) {
+                    // User selected a new key
+                    char* key_name = g_input.key_to_char(key);
+                    std::cout << "Bound '" << current_action 
+                              << "' to " << key_name << std::endl;
+                    
+                    // Save the new binding
+                    save_keybind(current_action, key);
+                }
+            },
+            [this](bool cancelled) {
+                std::cout << "Rebinding cancelled" << std::endl;
+            }
+        );
+    }
+    
+private:
+    std::string current_action;
+    
+    void save_keybind(const std::string& action, std::uint8_t key)
+    {
+        // Save to configuration
+        keybinds[action] = key;
+    }
+    
+    std::map<std::string, std::uint8_t> keybinds;
+};
+```
+
+</CodeGroup>
+
+## Supported Input Events
+
+The `think()` method processes these Windows messages:
+
+- **Keyboard**: WM_KEYDOWN, WM_KEYUP
+- **Mouse Buttons**: WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP
+- **Extra Mouse Buttons**: WM_XBUTTONDOWN, WM_XBUTTONUP (XBUTTON1, XBUTTON2)
+- **Mouse Movement**: WM_MOUSEMOVE
+- **Mouse Wheel**: WM_MOUSEWHEEL
+- **Focus**: WM_KILLFOCUS, WM_SETFOCUS
+
+<Note>
+The KEY_RELEASED state is transient and only returns true within 100ms of the key being released. This prevents missed release events in polling scenarios.
+</Note>
+
+<Warning>
+When polling for keybinds, VK_ESCAPE, VK_LBUTTON, and VK_RBUTTON are reserved for cancelling the poll operation and will not be passed to the callback.
+</Warning>

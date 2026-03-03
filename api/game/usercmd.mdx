@@ -1,0 +1,270 @@
+---
+title: "c_user_cmd"
+description: "User command structure for CreateMove and input processing"
+---
+
+## Overview
+
+The `c_user_cmd` class represents a single user command that contains all input data for a tick. This is the primary structure used in CreateMove hooks to manipulate player input, view angles, movement, and button states.
+
+<Note>
+User commands are validated with CRC32 checksums to prevent tampering. Always recalculate the checksum after modifying command data.
+</Note>
+
+## Class Definition
+
+Location: `game/sdk/classes/c_usercmd.h:12`
+
+```cpp
+class c_user_cmd
+{
+public:
+    inline CRC32_t checksum();
+    virtual ~c_user_cmd();
+
+    int command_number;
+    int tick_count;
+    math::vec3 view_angles;
+    math::vec3 aim_direction;
+    float forward_move;
+    float side_move;
+    float up_move;
+    sdk::int_flag_t buttons;
+    char impulse;
+    int weapon_select;
+    int weapon_subtype;
+    int random_seed;
+    short moused_x;
+    short moused_y;
+    bool has_been_predicted;
+};
+```
+
+## Members
+
+### Command Identification
+
+<ResponseField name="command_number" type="int">
+  Unique identifier for this command. Increments with each tick.
+</ResponseField>
+
+<ResponseField name="tick_count" type="int">
+  Server tick when this command was created.
+</ResponseField>
+
+### View & Aim
+
+<ResponseField name="view_angles" type="math::vec3">
+  Player's view angles (pitch, yaw, roll). Modified for aimbot functionality.
+  - X (pitch): -89.0 to 89.0 degrees
+  - Y (yaw): -180.0 to 180.0 degrees
+  - Z (roll): typically 0.0
+</ResponseField>
+
+<ResponseField name="aim_direction" type="math::vec3">
+  Forward aim vector derived from view angles.
+</ResponseField>
+
+### Movement
+
+<ResponseField name="forward_move" type="float">
+  Forward/backward movement speed. Range: -450.0 to 450.0
+</ResponseField>
+
+<ResponseField name="side_move" type="float">
+  Left/right strafe movement speed. Range: -450.0 to 450.0
+</ResponseField>
+
+<ResponseField name="up_move" type="float">
+  Jump/crouch movement. Typically 0.0, 320.0 (jump), or -320.0 (crouch).
+</ResponseField>
+
+### Input State
+
+<ResponseField name="buttons" type="sdk::int_flag_t">
+  Bitfield of pressed buttons (IN_ATTACK, IN_JUMP, IN_DUCK, etc.).
+</ResponseField>
+
+<ResponseField name="impulse" type="char">
+  Impulse commands for special actions.
+</ResponseField>
+
+<ResponseField name="weapon_select" type="int">
+  Weapon entity index to switch to.
+</ResponseField>
+
+<ResponseField name="weapon_subtype" type="int">
+  Weapon subtype for multi-variant weapons.
+</ResponseField>
+
+### Mouse & Randomization
+
+<ResponseField name="moused_x" type="short">
+  Mouse delta X for this tick.
+</ResponseField>
+
+<ResponseField name="moused_y" type="short">
+  Mouse delta Y for this tick.
+</ResponseField>
+
+<ResponseField name="random_seed" type="int">
+  Synchronized random seed for prediction. Generated from MD5 hash of command.
+</ResponseField>
+
+### Prediction
+
+<ResponseField name="has_been_predicted" type="bool">
+  Flag indicating if this command has been run through prediction.
+</ResponseField>
+
+## Methods
+
+### checksum()
+
+Calculates CRC32 checksum of the command data for validation.
+
+Location: `game/sdk/classes/c_usercmd.h:15`
+
+```cpp
+inline CRC32_t checksum()
+{
+    CRC32_t crc;
+    CRC32_Init(&crc);
+
+    CRC32_ProcessBuffer(&crc, &command_number, sizeof(command_number));
+    CRC32_ProcessBuffer(&crc, &tick_count, sizeof(tick_count));
+    CRC32_ProcessBuffer(&crc, &view_angles, sizeof(view_angles));
+    CRC32_ProcessBuffer(&crc, &aim_direction, sizeof(aim_direction));
+    CRC32_ProcessBuffer(&crc, &forward_move, sizeof(forward_move));
+    CRC32_ProcessBuffer(&crc, &side_move, sizeof(side_move));
+    CRC32_ProcessBuffer(&crc, &up_move, sizeof(up_move));
+    CRC32_ProcessBuffer(&crc, &buttons, sizeof(buttons));
+    CRC32_ProcessBuffer(&crc, &impulse, sizeof(impulse));
+    CRC32_ProcessBuffer(&crc, &weapon_select, sizeof(weapon_select));
+    CRC32_ProcessBuffer(&crc, &weapon_subtype, sizeof(weapon_subtype));
+    CRC32_ProcessBuffer(&crc, &random_seed, sizeof(random_seed));
+    CRC32_ProcessBuffer(&crc, &moused_x, sizeof(moused_x));
+    CRC32_ProcessBuffer(&crc, &moused_y, sizeof(moused_y));
+
+    CRC32_Final(&crc);
+    return crc;
+}
+```
+
+<ParamField path="return" type="CRC32_t">
+  CRC32 checksum value for validation.
+</ParamField>
+
+## Usage Examples
+
+### CreateMove Hook - Basic Aimbot
+
+<CodeGroup>
+```cpp Basic Aimbot
+void __stdcall create_move_hook(int sequence_number, float input_sample_time, bool active)
+{
+    auto cmd = g_input->get_user_cmd(sequence_number);
+    if (!cmd || !cmd->command_number)
+        return;
+
+    auto local_player = g_entity_list->get_client_entity(g_engine->get_local_player());
+    if (!local_player || !local_player->is_alive())
+        return;
+
+    // Find target
+    auto target = find_best_target(local_player);
+    if (target)
+    {
+        // Calculate aim angles
+        math::vec3 aim_angles = calculate_angle(local_player->get_eye_position(), target->get_hitbox_position(HITBOX_HEAD));
+        
+        // Set view angles
+        cmd->view_angles = aim_angles;
+        
+        // Auto-fire when aimed at target
+        cmd->buttons |= IN_ATTACK;
+    }
+}
+```
+
+```cpp Bunny Hop
+void __stdcall create_move_hook(int sequence_number, float input_sample_time, bool active)
+{
+    auto cmd = g_input->get_user_cmd(sequence_number);
+    if (!cmd || !cmd->command_number)
+        return;
+
+    auto local_player = g_entity_list->get_client_entity(g_engine->get_local_player());
+    if (!local_player)
+        return;
+
+    // Auto bunny hop
+    if (cmd->buttons & IN_JUMP)
+    {
+        // Only jump when on ground
+        if (!(local_player->get_flags() & FL_ONGROUND))
+            cmd->buttons &= ~IN_JUMP;
+    }
+}
+```
+
+```cpp Movement Correction
+void correct_movement(c_user_cmd* cmd, math::vec3 old_angles)
+{
+    // Correct movement after angle changes
+    float old_forward = cmd->forward_move;
+    float old_side = cmd->side_move;
+
+    float old_yaw = DEG2RAD(old_angles.y);
+    float new_yaw = DEG2RAD(cmd->view_angles.y);
+    float delta_yaw = new_yaw - old_yaw;
+
+    cmd->forward_move = cos(delta_yaw) * old_forward - sin(delta_yaw) * old_side;
+    cmd->side_move = sin(delta_yaw) * old_forward + cos(delta_yaw) * old_side;
+}
+```
+</CodeGroup>
+
+### Working with Buttons
+
+```cpp
+// Check if button is pressed
+if (cmd->buttons & IN_ATTACK)
+{
+    // Attack button is pressed
+}
+
+// Add button press
+cmd->buttons |= IN_DUCK;  // Force crouch
+
+// Remove button press
+cmd->buttons &= ~IN_JUMP;  // Cancel jump
+
+// Toggle button
+cmd->buttons ^= IN_ATTACK2;  // Toggle alt-fire
+```
+
+### Prediction Integration
+
+```cpp
+void run_prediction(c_user_cmd* cmd)
+{
+    if (cmd->has_been_predicted)
+        return;
+
+    // Set random seed for synchronized prediction
+    *g_prediction_seed = cmd->random_seed;
+    
+    // Run prediction
+    g_prediction->setup_move(local_player, cmd, move_helper, move_data);
+    g_game_movement->process_movement(local_player, move_data);
+    g_prediction->finish_move(local_player, cmd, move_data);
+    
+    cmd->has_been_predicted = true;
+}
+```
+
+## Related
+
+- [c_input](/api/game/input) - Input manager that stores user commands
+- [c_client_state](/api/game/client-state) - Client state with command timing information

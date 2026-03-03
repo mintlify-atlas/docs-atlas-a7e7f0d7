@@ -1,0 +1,359 @@
+---
+title: "c_client_state"
+description: "Client network state and connection information"
+---
+
+## Overview
+
+The `c_client_state` class manages the client's connection state, network information, and synchronization data with the game server. It contains critical data for networking, prediction, and command processing.
+
+<Note>
+This class is essential for understanding client-server synchronization, command acknowledgment, and tick-based game simulation.
+</Note>
+
+## Class Definition
+
+Location: `game/sdk/classes/c_client_state.h:10`
+
+```cpp
+class c_client_state
+{
+public:
+    PAD(0x9C);
+    i_net_channel_info* net_channel;
+    int challenge_nr;
+    PAD(0x64);
+    int signon_state;
+    PAD(0x8);
+    float next_command_time;
+    int server_count;
+    int current_sequence;
+    PAD(0x54);
+    int delta_tick;
+    bool paused;
+    PAD(0x7);
+    int view_entity;
+    int player_slot;
+    char level_name[MAX_PATH];
+    char level_name_short[80];
+    char map_group_name[80];
+    char last_level_name_short[80];
+    PAD(0xC);
+    int max_clients;
+    PAD(0x498C);
+    float last_server_tick_time;
+    bool in_simulation;
+    PAD(0x3);
+    int old_tick_count;
+    float tick_remainder;
+    float frame_time;
+    int last_outgoing_command;
+    int choked_commands;
+    int last_command_ack;
+    int command_ack;
+    int sound_sequence;
+    PAD(0x50);
+    math::vec3 view_point;
+    PAD(0xD0);
+    c_event_info* events;
+};
+```
+
+## Members
+
+### Network Connection
+
+<ResponseField name="net_channel" type="i_net_channel_info*">
+  Pointer to the network channel interface. Provides latency, packet loss, and flow statistics.
+</ResponseField>
+
+<ResponseField name="challenge_nr" type="int">
+  Challenge number for server authentication.
+</ResponseField>
+
+<ResponseField name="signon_state" type="int">
+  Current connection state:
+  - 0: SIGNONSTATE_NONE
+  - 1: SIGNONSTATE_CHALLENGE
+  - 2: SIGNONSTATE_CONNECTED
+  - 3: SIGNONSTATE_NEW
+  - 4: SIGNONSTATE_PRESPAWN
+  - 5: SIGNONSTATE_SPAWN
+  - 6: SIGNONSTATE_FULL (fully connected)
+</ResponseField>
+
+### Server Information
+
+<ResponseField name="server_count" type="int">
+  Server session identifier. Changes on map load or server restart.
+</ResponseField>
+
+<ResponseField name="max_clients" type="int">
+  Maximum number of clients allowed on the server.
+</ResponseField>
+
+<ResponseField name="view_entity" type="int">
+  Entity index of the current view entity (usually the local player).
+</ResponseField>
+
+<ResponseField name="player_slot" type="int">
+  Local player's slot index (0-based).
+</ResponseField>
+
+### Map Information
+
+<ResponseField name="level_name" type="char[MAX_PATH]">
+  Full path to the current map (e.g., "maps/de_dust2.bsp").
+</ResponseField>
+
+<ResponseField name="level_name_short" type="char[80]">
+  Short map name without path or extension (e.g., "de_dust2").
+</ResponseField>
+
+<ResponseField name="map_group_name" type="char[80]">
+  Map group identifier for matchmaking.
+</ResponseField>
+
+<ResponseField name="last_level_name_short" type="char[80]">
+  Previous map's short name.
+</ResponseField>
+
+### Timing & Simulation
+
+<ResponseField name="next_command_time" type="float">
+  Time when the next command should be sent to the server.
+</ResponseField>
+
+<ResponseField name="last_server_tick_time" type="float">
+  Timestamp of the last server tick received.
+</ResponseField>
+
+<ResponseField name="frame_time" type="float">
+  Duration of the current frame in seconds.
+</ResponseField>
+
+<ResponseField name="tick_remainder" type="float">
+  Fractional tick time carried over between frames.
+</ResponseField>
+
+<ResponseField name="in_simulation" type="bool">
+  True when the client is currently running simulation/prediction.
+</ResponseField>
+
+<ResponseField name="paused" type="bool">
+  True when the game is paused.
+</ResponseField>
+
+<ResponseField name="old_tick_count" type="int">
+  Previous tick count for delta calculations.
+</ResponseField>
+
+### Command Processing
+
+<ResponseField name="current_sequence" type="int">
+  Current command sequence number being processed.
+</ResponseField>
+
+<ResponseField name="last_outgoing_command" type="int">
+  Sequence number of the last command sent to the server.
+</ResponseField>
+
+<ResponseField name="choked_commands" type="int">
+  Number of commands queued but not yet sent (used for lag compensation).
+</ResponseField>
+
+<ResponseField name="last_command_ack" type="int">
+  Last command sequence acknowledged by the server.
+</ResponseField>
+
+<ResponseField name="command_ack" type="int">
+  Most recent command acknowledged by the server.
+</ResponseField>
+
+<ResponseField name="delta_tick" type="int">
+  Tick difference for delta compression.
+</ResponseField>
+
+### Events & View
+
+<ResponseField name="sound_sequence" type="int">
+  Sound event sequence number.
+</ResponseField>
+
+<ResponseField name="view_point" type="math::vec3">
+  Current view position in world space.
+</ResponseField>
+
+<ResponseField name="events" type="c_event_info*">
+  Pointer to client-side event information array.
+</ResponseField>
+
+## Usage Examples
+
+### Accessing Client State
+
+```cpp
+// Get client state from engine
+auto client_state = **reinterpret_cast<c_client_state***>(
+    pattern::find("engine.dll", "A1 ? ? ? ? 33 D2 6A 00 6A 00 33 C9 89 B0") + 1
+);
+
+if (client_state)
+{
+    // Access client state members
+    int ping = client_state->net_channel->get_avg_latency(FLOW_OUTGOING);
+    bool connected = client_state->signon_state == SIGNONSTATE_FULL;
+}
+```
+
+### Network Statistics
+
+<CodeGroup>
+```cpp Latency Info
+float get_ping(c_client_state* client_state)
+{
+    if (!client_state || !client_state->net_channel)
+        return 0.0f;
+
+    // Get average latency in seconds
+    float latency = client_state->net_channel->get_avg_latency(FLOW_OUTGOING);
+    
+    // Convert to milliseconds
+    return latency * 1000.0f;
+}
+```
+
+```cpp Connection Quality
+void check_connection_quality(c_client_state* client_state)
+{
+    if (!client_state || !client_state->net_channel)
+        return;
+
+    float in_latency = client_state->net_channel->get_avg_latency(FLOW_INCOMING);
+    float out_latency = client_state->net_channel->get_avg_latency(FLOW_OUTGOING);
+    float packet_loss = client_state->net_channel->get_avg_loss(FLOW_INCOMING);
+    
+    if (packet_loss > 0.05f)  // 5% packet loss
+        console->warning("High packet loss detected: %.1f%%", packet_loss * 100.0f);
+    
+    if (out_latency > 0.1f)  // 100ms ping
+        console->warning("High latency detected: %.0fms", out_latency * 1000.0f);
+}
+```
+</CodeGroup>
+
+### Command Timing
+
+```cpp
+// Check if we should send a new command
+bool should_send_command(c_client_state* client_state)
+{
+    if (!client_state)
+        return false;
+
+    // Check if enough time has passed since last command
+    float current_time = g_globals->curtime;
+    return current_time >= client_state->next_command_time;
+}
+
+// Calculate command choke for lag compensation
+int get_choke_amount(c_client_state* client_state)
+{
+    if (!client_state)
+        return 0;
+
+    // Number of commands waiting to be sent
+    return client_state->choked_commands;
+}
+```
+
+### Map Detection
+
+```cpp
+bool is_on_map(c_client_state* client_state, const char* map_name)
+{
+    if (!client_state)
+        return false;
+
+    return strcmp(client_state->level_name_short, map_name) == 0;
+}
+
+void on_map_load(c_client_state* client_state)
+{
+    if (!client_state)
+        return;
+
+    console->info("Loaded map: %s", client_state->level_name_short);
+    console->info("Max players: %d", client_state->max_clients);
+    console->info("Player slot: %d", client_state->player_slot);
+}
+```
+
+### Connection State Monitoring
+
+```cpp
+const char* get_signon_state_name(int state)
+{
+    switch (state)
+    {
+        case 0: return "NONE";
+        case 1: return "CHALLENGE";
+        case 2: return "CONNECTED";
+        case 3: return "NEW";
+        case 4: return "PRESPAWN";
+        case 5: return "SPAWN";
+        case 6: return "FULL";
+        default: return "UNKNOWN";
+    }
+}
+
+void monitor_connection(c_client_state* client_state)
+{
+    static int last_signon_state = -1;
+    
+    if (!client_state)
+        return;
+
+    if (client_state->signon_state != last_signon_state)
+    {
+        console->info("Connection state changed: %s -> %s",
+            get_signon_state_name(last_signon_state),
+            get_signon_state_name(client_state->signon_state));
+        
+        last_signon_state = client_state->signon_state;
+    }
+}
+```
+
+### Prediction Timing
+
+```cpp
+void setup_prediction_timing(c_client_state* client_state)
+{
+    if (!client_state || !client_state->in_simulation)
+        return;
+
+    // Store original values
+    float old_curtime = g_globals->curtime;
+    float old_frametime = g_globals->frametime;
+    int old_tickcount = g_globals->tickcount;
+
+    // Set prediction timing
+    g_globals->curtime = client_state->last_server_tick_time;
+    g_globals->frametime = client_state->frame_time;
+    g_globals->tickcount = client_state->old_tick_count + 1;
+
+    // Run prediction...
+
+    // Restore original values
+    g_globals->curtime = old_curtime;
+    g_globals->frametime = old_frametime;
+    g_globals->tickcount = old_tickcount;
+}
+```
+
+## Related
+
+- [c_user_cmd](/api/game/usercmd) - User commands processed using client state timing
+- [c_input](/api/game/input) - Input manager that creates commands based on client state
+- [Game Interfaces](/api/game/interfaces) - Other game interfaces including network channel

@@ -1,0 +1,349 @@
+---
+title: "c_input"
+description: "Input manager for user commands and camera control"
+---
+
+## Overview
+
+The `c_input` class manages player input, storing user commands and verified commands in circular buffers. It provides access to camera settings and methods to retrieve commands by sequence number.
+
+<Note>
+The input system uses a circular buffer of 150 commands (`multiplayer_backup`) to store command history for prediction and lag compensation.
+</Note>
+
+## Class Definition
+
+Location: `game/sdk/classes/c_input.h:16`
+
+```cpp
+constexpr std::size_t multiplayer_backup = 150;
+
+class c_input
+{
+public:
+    PAD(0xC);
+    bool trackir_available;
+    bool mouse_initialized;
+    bool mouse_active;
+    PAD(0x9A);
+    bool camera_in_third_person;
+    PAD(0x2);
+    math::vec3 camera_offset;
+    PAD(0x38);
+    sdk::c_user_cmd* commands;
+    sdk::c_verified_cmd* verified_commands;
+
+    inline sdk::c_user_cmd* get_user_cmd(const int sequence_number);
+    inline sdk::c_verified_cmd* get_verified_cmd(const int sequence_number);
+};
+```
+
+## Members
+
+### Mouse & Input State
+
+<ResponseField name="trackir_available" type="bool">
+  Indicates if TrackIR head tracking is available.
+</ResponseField>
+
+<ResponseField name="mouse_initialized" type="bool">
+  True when the mouse input system has been initialized.
+</ResponseField>
+
+<ResponseField name="mouse_active" type="bool">
+  True when mouse input is currently active and being processed.
+</ResponseField>
+
+### Camera Control
+
+<ResponseField name="camera_in_third_person" type="bool">
+  True when the camera is in third-person mode (e.g., spectating or using thirdperson command).
+</ResponseField>
+
+<ResponseField name="camera_offset" type="math::vec3">
+  3D offset vector for third-person camera positioning relative to the player.
+</ResponseField>
+
+### Command Buffers
+
+<ResponseField name="commands" type="sdk::c_user_cmd*">
+  Pointer to circular buffer array of user commands. Size: `multiplayer_backup` (150).
+</ResponseField>
+
+<ResponseField name="verified_commands" type="sdk::c_verified_cmd*">
+  Pointer to circular buffer array of verified commands with CRC checksums. Size: `multiplayer_backup` (150).
+</ResponseField>
+
+## Methods
+
+### get_user_cmd()
+
+Retrieves a user command from the circular buffer by sequence number.
+
+Location: `game/sdk/classes/c_input.h:36`
+
+```cpp
+inline sdk::c_user_cmd* get_user_cmd(const int sequence_number)
+{
+    return &commands[sequence_number % multiplayer_backup];
+}
+```
+
+<ParamField path="sequence_number" type="int">
+  The command sequence number to retrieve.
+</ParamField>
+
+<ParamField path="return" type="sdk::c_user_cmd*">
+  Pointer to the user command at the calculated buffer index.
+</ParamField>
+
+### get_verified_cmd()
+
+Retrieves a verified command from the circular buffer by sequence number.
+
+Location: `game/sdk/classes/c_input.h:41`
+
+```cpp
+inline sdk::c_verified_cmd* get_verified_cmd(const int sequence_number)
+{
+    return &verified_commands[sequence_number % multiplayer_backup];
+}
+```
+
+<ParamField path="sequence_number" type="int">
+  The command sequence number to retrieve.
+</ParamField>
+
+<ParamField path="return" type="sdk::c_verified_cmd*">
+  Pointer to the verified command at the calculated buffer index.
+</ParamField>
+
+## Usage Examples
+
+### Accessing Input Instance
+
+```cpp
+// Global input pointer (initialize via signature scan)
+c_input* g_input = nullptr;
+
+// Pattern scan in client.dll
+void initialize_input()
+{
+    auto pattern_address = pattern::find("client.dll", "B9 ? ? ? ? F3 0F 11 04 24 FF 50 10");
+    g_input = **reinterpret_cast<c_input***>(pattern_address + 1);
+}
+```
+
+### CreateMove Hook Integration
+
+<CodeGroup>
+```cpp Basic CreateMove
+void __stdcall hooked_create_move(int sequence_number, float input_sample_time, bool active)
+{
+    // Get the user command for this sequence
+    auto cmd = g_input->get_user_cmd(sequence_number);
+    if (!cmd || !cmd->command_number)
+        return;
+
+    // Modify command
+    cmd->view_angles.x = 0.0f;  // Level pitch
+    
+    // Get verified command and update checksum
+    auto verified = g_input->get_verified_cmd(sequence_number);
+    verified->cmd = *cmd;
+    verified->crc = cmd->checksum();
+}
+```
+
+```cpp With Verification
+void __stdcall hooked_create_move(int sequence_number, float input_sample_time, bool active)
+{
+    auto cmd = g_input->get_user_cmd(sequence_number);
+    auto verified = g_input->get_verified_cmd(sequence_number);
+    
+    if (!cmd || !verified || !cmd->command_number)
+        return;
+
+    // Store original for verification
+    auto original_cmd = *cmd;
+
+    // Modify command (your cheat features here)
+    apply_aim_assistance(cmd);
+    apply_movement_features(cmd);
+
+    // Update verified command with new checksum
+    verified->cmd = *cmd;
+    verified->crc = cmd->checksum();
+}
+```
+</CodeGroup>
+
+### Command History Access
+
+```cpp
+// Get previous command for delta calculations
+c_user_cmd* get_previous_command(int current_sequence)
+{
+    return g_input->get_user_cmd(current_sequence - 1);
+}
+
+// Analyze last N commands for pattern detection
+void analyze_input_pattern(int current_sequence, int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        int seq = current_sequence - i;
+        auto cmd = g_input->get_user_cmd(seq);
+        
+        if (cmd && cmd->command_number)
+        {
+            console->debug("[%d] Buttons: 0x%X, Angles: %.2f %.2f %.2f",
+                seq,
+                cmd->buttons,
+                cmd->view_angles.x,
+                cmd->view_angles.y,
+                cmd->view_angles.z);
+        }
+    }
+}
+```
+
+### Third-Person Camera Control
+
+```cpp
+void toggle_thirdperson(bool enable)
+{
+    if (!g_input)
+        return;
+
+    g_input->camera_in_third_person = enable;
+    
+    if (enable)
+    {
+        // Set camera behind and above player
+        g_input->camera_offset.x = 0.0f;
+        g_input->camera_offset.y = -150.0f;  // Behind player
+        g_input->camera_offset.z = 50.0f;    // Above player
+    }
+}
+
+void update_thirdperson_angle(float yaw_offset)
+{
+    if (!g_input || !g_input->camera_in_third_person)
+        return;
+
+    // Rotate camera around player
+    float angle = DEG2RAD(yaw_offset);
+    float distance = 150.0f;
+    
+    g_input->camera_offset.x = sin(angle) * distance;
+    g_input->camera_offset.y = cos(angle) * distance;
+}
+```
+
+### Command Backtrack
+
+```cpp
+// Store commands for lag compensation backtracking
+struct cmd_backup_t
+{
+    int sequence;
+    c_user_cmd cmd;
+    float time;
+};
+
+std::deque<cmd_backup_t> command_history;
+
+void backup_command(int sequence_number)
+{
+    auto cmd = g_input->get_user_cmd(sequence_number);
+    if (!cmd || !cmd->command_number)
+        return;
+
+    cmd_backup_t backup;
+    backup.sequence = sequence_number;
+    backup.cmd = *cmd;
+    backup.time = g_globals->curtime;
+    
+    command_history.push_back(backup);
+    
+    // Keep only last 150 commands (multiplayer_backup)
+    if (command_history.size() > multiplayer_backup)
+        command_history.pop_front();
+}
+
+// Find command at specific time for backtracking
+c_user_cmd* get_command_at_time(float target_time)
+{
+    for (auto& backup : command_history)
+    {
+        if (abs(backup.time - target_time) < 0.001f)
+            return &backup.cmd;
+    }
+    return nullptr;
+}
+```
+
+### Input State Diagnostics
+
+```cpp
+void debug_input_state()
+{
+    if (!g_input)
+    {
+        console->error("Input system not initialized");
+        return;
+    }
+
+    console->info("=== Input System State ===");
+    console->info("Mouse initialized: %s", g_input->mouse_initialized ? "Yes" : "No");
+    console->info("Mouse active: %s", g_input->mouse_active ? "Yes" : "No");
+    console->info("TrackIR available: %s", g_input->trackir_available ? "Yes" : "No");
+    console->info("Third person: %s", g_input->camera_in_third_person ? "Yes" : "No");
+    
+    if (g_input->camera_in_third_person)
+    {
+        console->info("Camera offset: %.2f, %.2f, %.2f",
+            g_input->camera_offset.x,
+            g_input->camera_offset.y,
+            g_input->camera_offset.z);
+    }
+}
+```
+
+### Multi-Command Processing
+
+```cpp
+// Process multiple choked commands for smoother gameplay
+void process_choked_commands(int final_sequence, int choke_count)
+{
+    for (int i = 0; i <= choke_count; ++i)
+    {
+        int seq = final_sequence - choke_count + i;
+        auto cmd = g_input->get_user_cmd(seq);
+        
+        if (!cmd || !cmd->command_number)
+            continue;
+
+        // Apply features to each command in the choke cycle
+        apply_features(cmd);
+        
+        // Update verification
+        auto verified = g_input->get_verified_cmd(seq);
+        verified->cmd = *cmd;
+        verified->crc = cmd->checksum();
+    }
+}
+```
+
+## Constants
+
+<ResponseField name="multiplayer_backup" type="std::size_t" default="150">
+  Size of the circular command buffer. Defines the maximum number of commands stored for prediction and lag compensation.
+</ResponseField>
+
+## Related
+
+- [c_user_cmd](/api/game/usercmd) - User command structure stored in input buffers
+- [c_client_state](/api/game/client-state) - Client state that manages command timing
+- [CreateMove hook](/api/hooks/create-move) - Primary hook for modifying user commands

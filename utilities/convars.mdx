@@ -1,0 +1,204 @@
+---
+title: "Console Variables"
+description: "Utility for accessing and manipulating game engine console variables"
+---
+
+## Overview
+
+The `convars` utility provides a convenient interface for accessing console variables (cvars) from the game engine. It wraps the engine's convar interface with an easy-to-use operator[] syntax.
+
+## Usage
+
+Access console variables using the global instance:
+
+```cpp
+#include "utils/convars/convars.h"
+
+// Access a console variable
+auto* sv_cheats = g_convars["sv_cheats"];
+```
+
+## Global Instance
+
+<ParamField path="g_convars" type="convars::impl">
+  Global singleton instance of the console variable utility
+</ParamField>
+
+## Class: convars::impl
+
+### Operators
+
+#### operator[]
+
+Retrieves a pointer to a console variable by name.
+
+<ParamField path="convar_name" type="const char*" required>
+  The name of the console variable to retrieve
+</ParamField>
+
+<ResponseField name="return" type="sdk::con_var*">
+  Pointer to the console variable, or nullptr if not found
+</ResponseField>
+
+```cpp
+auto* cvar = g_convars["sensitivity"];
+if (cvar) {
+    // Console variable was found
+}
+```
+
+## Common Usage Patterns
+
+### Reading Console Variable Values
+
+```cpp
+// Get a console variable
+auto* sensitivity = g_convars["sensitivity"];
+
+if (sensitivity) {
+    // Read the float value
+    float value = sensitivity->get_float();
+    
+    // Read the int value
+    int int_value = sensitivity->get_int();
+    
+    // Read the string value
+    const char* str_value = sensitivity->get_string();
+}
+```
+
+### Setting Console Variable Values
+
+```cpp
+// Get sv_cheats console variable
+auto* sv_cheats = g_convars["sv_cheats"];
+
+if (sv_cheats) {
+    // Set to integer value
+    sv_cheats->set_value(1);
+    
+    // Set to float value
+    sv_cheats->set_value(1.0f);
+    
+    // Set to string value
+    sv_cheats->set_value("1");
+}
+```
+
+### Checking Console Variable Flags
+
+```cpp
+auto* cvar = g_convars["r_drawothermodels"];
+
+if (cvar) {
+    // Check if the cvar has specific flags
+    if (cvar->get_flags() & FCVAR_CHEAT) {
+        // This is a cheat-protected variable
+    }
+    
+    // Modify flags (use with caution)
+    cvar->set_flags(cvar->get_flags() & ~FCVAR_CHEAT);
+}
+```
+
+## Complete Example
+
+<CodeGroup>
+
+```cpp Basic Usage
+#include "utils/convars/convars.h"
+
+void adjust_game_settings()
+{
+    // Access sensitivity setting
+    auto* sensitivity = g_convars["sensitivity"];
+    if (sensitivity) {
+        float current = sensitivity->get_float();
+        sensitivity->set_value(current * 1.5f);
+    }
+    
+    // Enable developer mode
+    auto* developer = g_convars["developer"];
+    if (developer) {
+        developer->set_value(1);
+    }
+    
+    // Set viewmodel FOV
+    auto* viewmodel_fov = g_convars["viewmodel_fov"];
+    if (viewmodel_fov) {
+        viewmodel_fov->set_value(90);
+    }
+}
+```
+
+```cpp Advanced Usage
+#include "utils/convars/convars.h"
+
+class ConVarManager
+{
+public:
+    void unlock_cheat_cvars()
+    {
+        const char* cheat_cvars[] = {
+            "sv_cheats",
+            "r_drawothermodels",
+            "mat_wireframe",
+            nullptr
+        };
+        
+        for (int i = 0; cheat_cvars[i] != nullptr; i++) {
+            auto* cvar = g_convars[cheat_cvars[i]];
+            if (cvar) {
+                // Remove cheat flag
+                int flags = cvar->get_flags();
+                cvar->set_flags(flags & ~FCVAR_CHEAT);
+            }
+        }
+    }
+    
+    void save_original_value(const char* name)
+    {
+        auto* cvar = g_convars[name];
+        if (cvar) {
+            original_values[name] = cvar->get_float();
+        }
+    }
+    
+    void restore_original_value(const char* name)
+    {
+        if (original_values.count(name)) {
+            auto* cvar = g_convars[name];
+            if (cvar) {
+                cvar->set_value(original_values[name]);
+            }
+        }
+    }
+    
+private:
+    std::map<std::string, float> original_values;
+};
+```
+
+</CodeGroup>
+
+## Common Console Variables
+
+Here are some commonly accessed console variables:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `sv_cheats` | int | Enables cheat commands |
+| `sensitivity` | float | Mouse sensitivity |
+| `viewmodel_fov` | int | Field of view for viewmodel |
+| `r_drawothermodels` | int | Draw mode for player models |
+| `mat_wireframe` | int | Wireframe rendering mode |
+| `developer` | int | Developer mode |
+| `con_filter_enable` | int | Console filtering |
+
+<Note>
+The console variable pointer returned by `operator[]` may be nullptr if the variable doesn't exist. Always check for nullptr before using the returned pointer.
+</Note>
+
+<Warning>
+Modifying certain console variables (especially cheat-protected ones) may trigger anti-cheat detection in online games. Use with caution.
+</Warning>
