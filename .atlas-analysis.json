@@ -1,0 +1,118 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "HotWheels SDK",
+  "projectDescription": "A comprehensive C++ game modification SDK for Counter-Strike: Global Offensive with advanced features and utilities.",
+  "theme": "aspen",
+  "primaryColor": "#E74C3C",
+  "lightColor": "#EC7063",
+  "darkColor": "#C0392B",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/hooking",
+              "concepts/memory"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/aimbot",
+              "features/visuals",
+              "features/movement",
+              "features/lagcomp",
+              "features/indicators"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "utilities/math",
+              "utilities/renderer",
+              "utilities/console",
+              "utilities/entity-list",
+              "utilities/netvars"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Game SDK",
+            "pages": [
+              "api/game/entities",
+              "api/game/weapons",
+              "api/game/players",
+              "api/game/interfaces"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utils/math",
+              "api/utils/renderer",
+              "api/utils/detour",
+              "api/utils/modules"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/hooks/create-move",
+              "api/hooks/frame-stage-notify",
+              "api/hooks/paint-traverse",
+              "api/hooks/draw-model-execute"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Complete game SDK with entity and interface wrappers",
+    "Advanced aimbot with hitchance calculation",
+    "Custom Direct3D9 rendering system with font support",
+    "Comprehensive math library with vectors, matrices, and quaternions",
+    "VMT and detour hooking utilities with MinHook integration",
+    "NetVar manager for dynamic offset resolution",
+    "Movement automation and lag compensation",
+    "Visual ESP with customizable rendering",
+    "Console logging with multiple log levels",
+    "Exception handling with mocking-bird integration"
+  ],
+  "publicApiSurface": [
+    "hotwheels::init() - Main initialization entry point",
+    "aimbot::impl::run() - Execute aimbot calculations",
+    "aimbot::impl::hitchance() - Calculate shot accuracy probability",
+    "render::impl::render_text() - Draw text on screen",
+    "render::impl::render_rectangle() - Draw rectangles",
+    "render::impl::render_circle() - Draw circles",
+    "render::impl::render_gradient() - Draw gradient fills",
+    "math::angle_vector() - Convert angles to direction vectors",
+    "math::calculate_angle() - Calculate angle between points",
+    "math::world_to_screen() - Project 3D coordinates to 2D",
+    "detour::hook::create() - Create function hook",
+    "detour::hook::replace() - Enable hook",
+    "utils::console::print() - Log to console",
+    "sdk::c_cs_player - CS:GO player entity wrapper",
+    "sdk::c_base_combat_weapon - Weapon entity wrapper",
+    "sdk::c_user_cmd - User command structure for movement",
+    "netvars - Network variable offset manager",
+    "entity_list - Game entity list accessor"
+  ]
+}
